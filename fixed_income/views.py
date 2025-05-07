@@ -7,6 +7,7 @@ import pandas as pd
 from .models import (
     VanillaBondSecMaster,
     Curve,
+CurvePoint,
     StressScenario,
 Position,
     ScenarioPosition,
@@ -15,7 +16,7 @@ Position,
 )
 from .serializers import (
     VanillaBondSecMasterSerializer,
-    CurveSerializer,
+    CurveSerializer,CurvePointSerializer,
     StressScenarioSerializer,
 PositionSerializer,
     ScenarioPositionSerializer,
@@ -33,11 +34,25 @@ class CurveViewSet(viewsets.ModelViewSet):
     queryset = Curve.objects.all()
     serializer_class = CurveSerializer
 
+class CurvePointViewSet(viewsets.ModelViewSet):
+    queryset = CurvePoint.objects.all()
+    serializer_class = CurvePointSerializer
+
+    def create(self, request, *args, **kwargs):
+        print("📦 Incoming data:", request.data)
+
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            print("❌ Serializer errors:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 class StressScenarioViewSet(viewsets.ModelViewSet):
     queryset = StressScenario.objects.all()
     serializer_class = StressScenarioSerializer
-
 
 class PositionViewSet(viewsets.ModelViewSet):
     queryset = Position.objects.all()
@@ -47,16 +62,13 @@ class ScenarioPositionViewSet(viewsets.ModelViewSet):
     queryset = ScenarioPosition.objects.all()
     serializer_class = ScenarioPositionSerializer
 
-
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
 
-
 class AborPnLViewSet(viewsets.ModelViewSet):
     queryset = AborPnL.objects.all()
     serializer_class = AborPnLSerializer
-
 
 class PositionUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -125,6 +137,7 @@ class PositionUploadCSV(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+
 class CurveUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
@@ -141,18 +154,42 @@ class CurveUploadCSV(APIView):
             if missing:
                 return Response({"error": f"Missing columns: {missing}"}, status=400)
 
-            records = [
-                Curve(
-                    adate=pd.to_datetime(row["adate"]).date(),
-                    curve_name=row["curve_name"],
-                    year=int(row["year"]),
-                    rate=float(row["rate"]),
-                )
-                for _, row in df.iterrows()
+            df["adate"] = pd.to_datetime(df["adate"]).dt.date
+
+            # Ensure all Curve names exist or are created
+            curve_names = df["curve_name"].unique()
+            existing_curves = {c.curve_name: c for c in Curve.objects.filter(curve_name__in=curve_names)}
+
+            new_curves = [
+                Curve(curve_name=name)
+                for name in curve_names
+                if name not in existing_curves
             ]
 
-            Curve.objects.bulk_create(records)
-            return Response({"status": "Upload successful", "rows": len(records)}, status=201)
+            Curve.objects.bulk_create(new_curves)
+
+            # Refresh curve dict after creation
+            all_curves = {c.curve_name: c for c in Curve.objects.filter(curve_name__in=curve_names)}
+
+            # Create CurvePoint records
+            curve_points = []
+            for _, row in df.iterrows():
+                curve = all_curves[row["curve_name"]]
+                curve_points.append(
+                    CurvePoint(
+                        curve=curve,
+                        adate=row["adate"],
+                        year=int(row["year"]),
+                        rate=float(row["rate"])
+                    )
+                )
+
+            CurvePoint.objects.bulk_create(curve_points)
+
+            return Response(
+                {"status": "Upload successful", "curves": len(all_curves), "points": len(curve_points)},
+                status=201,
+            )
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -161,12 +198,16 @@ class CurveUploadCSV(APIView):
 class FilteredCurveView(APIView):
     def get(self, request, curve_name, adate):
         try:
-            curves = Curve.objects.filter(curve_name=curve_name, adate=adate).order_by("year")
-            serializer = CurveSerializer(curves, many=True)
+            curve_points = CurvePoint.objects.filter(
+                curve__curve_name=curve_name,
+                adate=adate
+            ).order_by("year")
+
+            serializer = CurvePointSerializer(curve_points, many=True)
             return Response(serializer.data)
+
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 # view to bulk upload stress scenarios
 # curve id refers to combination of adate, curve name and year

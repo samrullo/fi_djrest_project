@@ -5,6 +5,7 @@ from .views import (
     ScenarioPositionViewSet,
     TransactionViewSet,
     CurveViewSet,
+CurvePointViewSet,
     FilteredCurveView,
     StressScenarioViewSet,
     AborPnLViewSet,
@@ -18,6 +19,7 @@ router.register(r"positions", PositionViewSet, "position")
 router.register(r"scenario-positions", ScenarioPositionViewSet, "scenario-position")
 router.register(r"transactions", TransactionViewSet, "transaction")
 router.register(r"curves", CurveViewSet, "curve")
+router.register(r"curve-points",CurvePointViewSet,"curve-point")
 router.register(r"stress-scenarios", StressScenarioViewSet, "stress-scenario")
 router.register(r"aborpnls", AborPnLViewSet, "aborpnl")
 

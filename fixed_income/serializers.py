@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import (
     VanillaBondSecMaster,
     Curve,
+CurvePoint,
     StressScenario,
 Position,
     ScenarioPosition,
@@ -20,11 +21,20 @@ class VanillaBondSecMasterSerializer(serializers.ModelSerializer):
 class CurveSerializer(serializers.ModelSerializer):
     class Meta:
         model = Curve
-        fields = "__all__"
+        fields = ["id", "curve_name"]
+
+class CurvePointSerializer(serializers.ModelSerializer):
+    curve_name = serializers.CharField(source="curve.curve_name", read_only=True)
+
+    class Meta:
+        model = CurvePoint
+        fields = ["id", "curve", "curve_name", "adate", "year", "rate"]
 
 class CurveNestedSerializer(serializers.ModelSerializer):
+    curve_name = CurveSerializer(source="curve",read_only=True)
+
     class Meta:
-        model = Curve
+        model = CurvePoint
         fields = ["id", "curve_name", "adate", "year", "rate"]
 
 class StressScenarioSerializer(serializers.ModelSerializer):

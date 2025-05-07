@@ -16,20 +16,40 @@ class VanillaBondSecMaster(models.Model):
     def __str__(self):
         return f"{self.asset_name} ({self.identifier_client})"
 
+class RiskCore(models.Model):
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="risk_core_data"
+    )
+    risk_date = models.DateField(help_text="As-of date for risk metrics")
+
+    price = models.FloatField()
+    yield_to_maturity = models.FloatField()
+    oas = models.FloatField(help_text="Option-Adjusted Spread")
+    discounted_pv = models.FloatField()
+
+    def __str__(self):
+        return f"RiskCore [{self.risk_date}] for {self.security.identifier_client} @ Price {self.price}"
 
 class Curve(models.Model):
-    adate = models.DateField()
-    curve_name = models.CharField(max_length=100)  # e.g., "USD_SWAP"
-    year = models.IntegerField()  # 1 to 30
+    curve_name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.curve_name
+
+class CurvePoint(models.Model):
+    curve = models.ForeignKey(Curve, on_delete=models.CASCADE, related_name="points")
+    adate = models.DateField(help_text="As-of date for this curve snapshot")
+    year = models.IntegerField(help_text="Tenor in years (1–30)")
     rate = models.FloatField(help_text="Swap rate in percent")
 
     class Meta:
-        unique_together = ("adate", "curve_name", "year")
-        ordering = ["adate", "curve_name", "year"]
+        unique_together = ("curve", "adate", "year")
+        ordering = ["curve__curve_name", "adate", "year"]
 
     def __str__(self):
-        return f"{self.adate} - {self.curve_name} - Year {self.year}: {self.rate:.2f}%"
-
+        return f"{self.curve.curve_name} on {self.adate} - Year {self.year}: {self.rate:.2f}%"
 
 class StressScenario(models.Model):
     scenario_id = models.IntegerField()
@@ -37,7 +57,7 @@ class StressScenario(models.Model):
     simulation_number = models.IntegerField()
 
     curve = models.ForeignKey(
-        Curve,
+        CurvePoint,
         on_delete=models.CASCADE,
         help_text="Reference to curve point for given name/date/year",
     )
