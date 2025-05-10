@@ -16,6 +16,17 @@ class VanillaBondSecMaster(models.Model):
     def __str__(self):
         return f"{self.asset_name} ({self.identifier_client})"
 
+
+class SecurityIdentifier(models.Model):
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="security_identifier_data"
+    )
+    identifier_type = models.CharField(max_length=50)
+    identifier_value = models.CharField(max_length=100)
+
+
 class RiskCore(models.Model):
     security = models.ForeignKey(
         VanillaBondSecMaster,
@@ -32,44 +43,87 @@ class RiskCore(models.Model):
     def __str__(self):
         return f"RiskCore [{self.risk_date}] for {self.security.identifier_client} @ Price {self.price}"
 
-class Curve(models.Model):
-    curve_name = models.CharField(max_length=100, unique=True)
+
+class CurveDescription(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
 
     def __str__(self):
-        return self.curve_name
+        return self.name
+
 
 class CurvePoint(models.Model):
-    curve = models.ForeignKey(Curve, on_delete=models.CASCADE, related_name="points")
+    curve_description = models.ForeignKey(
+        CurveDescription,
+        on_delete=models.CASCADE,
+        related_name="points"
+    )
     adate = models.DateField(help_text="As-of date for this curve snapshot")
     year = models.IntegerField(help_text="Tenor in years (1–30)")
     rate = models.FloatField(help_text="Swap rate in percent")
 
     class Meta:
-        unique_together = ("curve", "adate", "year")
-        ordering = ["curve__curve_name", "adate", "year"]
+        unique_together = ("curve_description", "adate", "year")
+        ordering = ["curve_description__name", "adate", "year"]
 
     def __str__(self):
-        return f"{self.curve.curve_name} on {self.adate} - Year {self.year}: {self.rate:.2f}%"
+        return f"{self.curve_description.name} on {self.adate} - Year {self.year}: {self.rate:.2f}%"
+
+
+class StressScenarioDescription(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
+
 
 class StressScenario(models.Model):
-    scenario_id = models.IntegerField()
+    scenario = models.ForeignKey(
+        StressScenarioDescription,
+        on_delete=models.CASCADE,
+        related_name="scenarios"
+    )
     period_number = models.IntegerField()
     simulation_number = models.IntegerField()
-
     curve = models.ForeignKey(
         CurvePoint,
         on_delete=models.CASCADE,
         help_text="Reference to curve point for given name/date/year",
     )
-
     period_length = models.FloatField(help_text="Length in years")
     parallel_shock_size = models.FloatField(help_text="Shock size in percentages")
 
     class Meta:
-        unique_together = ("scenario_id", "period_number", "simulation_number", "curve")
+        unique_together = ("scenario", "period_number", "simulation_number", "curve")
 
     def __str__(self):
-        return f"Scenario {self.scenario_id} - Period {self.period_number} - Sim {self.simulation_number}"
+        return f"{self.scenario.name} - Period {self.period_number} - Sim {self.simulation_number}"
+
+
+class RiskScenario(models.Model):
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="scenario_risk_data"
+    )
+    scenario = models.ForeignKey(
+        StressScenario,
+        on_delete=models.CASCADE,
+        related_name="risk_analytics"
+    )
+
+    price = models.FloatField()
+    yield_to_maturity = models.FloatField()
+    oas = models.FloatField(help_text="Option-Adjusted Spread")
+    discounted_pv = models.FloatField()
+
+    def __str__(self):
+        return (
+            f"RiskScenario - {self.security.identifier_client} "
+            f"for {self.scenario.scenario.name} P{self.scenario.period_number} S{self.scenario.simulation_number}"
+        )
+
 
 class Position(models.Model):
     portfolio_name = models.CharField(max_length=100)
@@ -85,11 +139,12 @@ class Position(models.Model):
     par_value = models.DecimalField(max_digits=20, decimal_places=4)
     book_price = models.DecimalField(max_digits=10, decimal_places=4)
     book_value = models.DecimalField(max_digits=20, decimal_places=4)
-    discounted_price = models.DecimalField(max_digits=10,decimal_places=4, blank=True, null=True)
+    discounted_price = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
 
     def __str__(self):
         return f"{self.portfolio_name} - {self.asset_name} [Lot {self.lot_id}]"
+
 
 class ScenarioPosition(models.Model):
     portfolio_name = models.CharField(max_length=100)
@@ -106,7 +161,7 @@ class ScenarioPosition(models.Model):
     par_value = models.DecimalField(max_digits=20, decimal_places=4)
     book_price = models.DecimalField(max_digits=20, decimal_places=4)
     book_value = models.DecimalField(max_digits=20, decimal_places=4)
-    discounted_price = models.DecimalField(max_digits=10,decimal_places=4, blank=True, null=True)
+    discounted_price = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
 
     def __str__(self):

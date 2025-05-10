@@ -6,22 +6,32 @@ import pandas as pd
 
 from .models import (
     VanillaBondSecMaster,
-    Curve,
-CurvePoint,
+    SecurityIdentifier,
+    RiskCore,
+    RiskScenario,
+    CurveDescription,
+    CurvePoint,
     StressScenario,
-Position,
+    Position,
     ScenarioPosition,
     Transaction,
     AborPnL,
+    StressScenarioDescription,
 )
+
 from .serializers import (
     VanillaBondSecMasterSerializer,
-    CurveSerializer,CurvePointSerializer,
+    SecurityIdentifierSerializer,
+    RiskCoreSerializer,
+    RiskScenarioSerializer,
+    CurveDescriptionSerializer,
+    CurvePointSerializer,
     StressScenarioSerializer,
-PositionSerializer,
+    PositionSerializer,
     ScenarioPositionSerializer,
     TransactionSerializer,
     AborPnLSerializer,
+    StressScenarioDescriptionSerializer,
 )
 
 
@@ -30,9 +40,25 @@ class VanillaBondSecMasterViewSet(viewsets.ModelViewSet):
     serializer_class = VanillaBondSecMasterSerializer
 
 
-class CurveViewSet(viewsets.ModelViewSet):
-    queryset = Curve.objects.all()
-    serializer_class = CurveSerializer
+class SecurityIdentifierViewSet(viewsets.ModelViewSet):
+    queryset = SecurityIdentifier.objects.all()
+    serializer_class = SecurityIdentifierSerializer
+
+
+class RiskCoreViewSet(viewsets.ModelViewSet):
+    queryset = RiskCore.objects.all()
+    serializer_class = RiskCoreSerializer
+
+
+class RiskScenarioViewSet(viewsets.ModelViewSet):
+    queryset = RiskScenario.objects.all()
+    serializer_class = RiskScenarioSerializer
+
+
+class CurveDescriptionViewSet(viewsets.ModelViewSet):
+    queryset = CurveDescription.objects.all()
+    serializer_class = CurveDescriptionSerializer
+
 
 class CurvePointViewSet(viewsets.ModelViewSet):
     queryset = CurvePoint.objects.all()
@@ -50,25 +76,35 @@ class CurvePointViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class StressScenarioDescriptionViewSet(viewsets.ModelViewSet):
+    queryset = StressScenarioDescription.objects.all()
+    serializer_class = StressScenarioDescriptionSerializer
+
+
 class StressScenarioViewSet(viewsets.ModelViewSet):
     queryset = StressScenario.objects.all()
     serializer_class = StressScenarioSerializer
+
 
 class PositionViewSet(viewsets.ModelViewSet):
     queryset = Position.objects.all()
     serializer_class = PositionSerializer
 
+
 class ScenarioPositionViewSet(viewsets.ModelViewSet):
     queryset = ScenarioPosition.objects.all()
     serializer_class = ScenarioPositionSerializer
+
 
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
 
+
 class AborPnLViewSet(viewsets.ModelViewSet):
     queryset = AborPnL.objects.all()
     serializer_class = AborPnLSerializer
+
 
 class PositionUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -76,34 +112,20 @@ class PositionUploadCSV(APIView):
     def post(self, request, format=None):
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return Response(
-                {"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             df = pd.read_csv(file_obj)
 
             required_columns = [
-                "portfolio_name",
-                "scenario_id",
-                "period_number",
-                "simulation_number",
-                "position_date",
-                "lot_id",
-                "asset_name",
-                "identifier_client",
-                "quantity",
-                "notional_amount",
-                "par_value",
-                "book_price",
-                "book_value",
+                "portfolio_name", "scenario_id", "period_number", "simulation_number",
+                "position_date", "lot_id", "asset_name", "identifier_client",
+                "quantity", "notional_amount", "par_value", "book_price", "book_value",
             ]
 
             missing = [col for col in required_columns if col not in df.columns]
             if missing:
-                return Response(
-                    {"error": f"Missing required columns: {missing}"}, status=400
-                )
+                return Response({"error": f"Missing required columns: {missing}"}, status=400)
 
             records = []
             for _, row in df.iterrows():
@@ -129,13 +151,10 @@ class PositionUploadCSV(APIView):
                 )
 
             ScenarioPosition.objects.bulk_create(records)
-            return Response(
-                {"status": "Upload successful", "rows": len(records)}, status=201
-            )
+            return Response({"status": "Upload successful", "rows": len(records)}, status=201)
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
-
 
 
 class CurveUploadCSV(APIView):
@@ -154,41 +173,48 @@ class CurveUploadCSV(APIView):
             if missing:
                 return Response({"error": f"Missing columns: {missing}"}, status=400)
 
+            # Optional column: curve_description
+            if "curve_description" not in df.columns:
+                df["curve_description"] = df["curve_name"]
+            else:
+                df["curve_description"] = df["curve_description"].fillna(df["curve_name"])
+
             df["adate"] = pd.to_datetime(df["adate"]).dt.date
 
-            # Ensure all Curve names exist or are created
-            curve_names = df["curve_name"].unique()
-            existing_curves = {c.curve_name: c for c in Curve.objects.filter(curve_name__in=curve_names)}
+            # Get unique (name, description) pairs
+            curve_info = df[["curve_name", "curve_description"]].drop_duplicates()
+            existing = {
+                c.name: c
+                for c in CurveDescription.objects.filter(name__in=curve_info["curve_name"].unique())
+            }
 
-            new_curves = [
-                Curve(curve_name=name)
-                for name in curve_names
-                if name not in existing_curves
+            new = [
+                CurveDescription(name=row.curve_name, description=row.curve_description)
+                for row in curve_info.itertuples(index=False)
+                if row.curve_name not in existing
             ]
+            CurveDescription.objects.bulk_create(new)
 
-            Curve.objects.bulk_create(new_curves)
+            all_curves = {
+                c.name: c for c in CurveDescription.objects.filter(name__in=curve_info["curve_name"].unique())
+            }
 
-            # Refresh curve dict after creation
-            all_curves = {c.curve_name: c for c in Curve.objects.filter(curve_name__in=curve_names)}
-
-            # Create CurvePoint records
-            curve_points = []
+            points = []
             for _, row in df.iterrows():
-                curve = all_curves[row["curve_name"]]
-                curve_points.append(
+                points.append(
                     CurvePoint(
-                        curve=curve,
+                        curve_description=all_curves[row["curve_name"]],
                         adate=row["adate"],
                         year=int(row["year"]),
-                        rate=float(row["rate"])
+                        rate=float(row["rate"]),
                     )
                 )
 
-            CurvePoint.objects.bulk_create(curve_points)
+            CurvePoint.objects.bulk_create(points)
 
             return Response(
-                {"status": "Upload successful", "curves": len(all_curves), "points": len(curve_points)},
-                status=201,
+                {"status": "Upload successful", "curves": len(all_curves), "points": len(points)},
+                status=201
             )
 
         except Exception as e:
@@ -198,73 +224,68 @@ class CurveUploadCSV(APIView):
 class FilteredCurveView(APIView):
     def get(self, request, curve_name, adate):
         try:
-            curve_points = CurvePoint.objects.filter(
-                curve__curve_name=curve_name,
+            points = CurvePoint.objects.filter(
+                curve_description__name=curve_name,
                 adate=adate
             ).order_by("year")
 
-            serializer = CurvePointSerializer(curve_points, many=True)
+            serializer = CurvePointSerializer(points, many=True)
             return Response(serializer.data)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# view to bulk upload stress scenarios
-# curve id refers to combination of adate, curve name and year
-# so if I have a curve with 30 years, then to define one period scenario where I shock the curve by 0.25 pct, I add 30 records with the same scenario_id, period_number, simulation_number
+
 class StressScenarioUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, format=None):
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return Response(
-                {"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             df = pd.read_csv(file_obj)
 
             required_columns = [
-                "scenario_id",
-                "period_number",
-                "simulation_number",
-                "curve",
-                "period_length",
-                "parallel_shock_size",
+                "scenario_name", "period_number", "simulation_number",
+                "curve_name", "curve_adate", "curve_year",
+                "period_length", "parallel_shock_size"
             ]
-
             missing = [col for col in required_columns if col not in df.columns]
             if missing:
-                return Response(
-                    {"error": f"Missing required columns: {missing}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                return Response({"error": f"Missing required columns: {missing}"}, status=400)
+
+            df["curve_adate"] = pd.to_datetime(df["curve_adate"]).dt.date
 
             records = []
             for _, row in df.iterrows():
+                scenario_desc, _ = StressScenarioDescription.objects.get_or_create(name=row["scenario_name"])
+
                 try:
-                    curve = Curve.objects.get(id=int(row["curve"]))  # lookup FK
-                except Curve.DoesNotExist:
-                    return Response(
-                        {"error": f"Curve ID {row['curve']} not found."},
-                        status=status.HTTP_400_BAD_REQUEST,
+                    curve_desc = CurveDescription.objects.get(name=row["curve_name"])
+                    curve_point = CurvePoint.objects.get(
+                        curve_description=curve_desc,
+                        adate=row["curve_adate"],
+                        year=int(row["curve_year"])
                     )
+                except CurvePoint.DoesNotExist:
+                    return Response({
+                        "error": f"CurvePoint not found for {row['curve_name']} {row['curve_adate']} y{row['curve_year']}"},
+                        status=400)
 
                 record = StressScenario(
-                    scenario_id=int(row["scenario_id"]),
+                    scenario=scenario_desc,
                     period_number=int(row["period_number"]),
                     simulation_number=int(row["simulation_number"]),
-                    curve=curve,  # assign the actual object, not curve_id
+                    curve=curve_point,
                     period_length=float(row["period_length"]),
                     parallel_shock_size=float(row["parallel_shock_size"]),
                 )
                 records.append(record)
 
             StressScenario.objects.bulk_create(records)
-            return Response(
-                {"status": "Upload successful", "rows": len(records)}, status=201
-            )
+            return Response({"status": "Upload successful", "rows": len(records)}, status=201)
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)

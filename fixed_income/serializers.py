@@ -1,16 +1,18 @@
 from rest_framework import serializers
 from .models import (
     VanillaBondSecMaster,
-    Curve,
-CurvePoint,
+    SecurityIdentifier,
+    CurveDescription,
+    CurvePoint,
     StressScenario,
-Position,
+    Position,
     ScenarioPosition,
     Transaction,
     AborPnL,
+    StressScenarioDescription,
+    RiskCore,
+    RiskScenario,
 )
-
-
 
 class VanillaBondSecMasterSerializer(serializers.ModelSerializer):
     class Meta:
@@ -18,45 +20,65 @@ class VanillaBondSecMasterSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class CurveSerializer(serializers.ModelSerializer):
+class SecurityIdentifierSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Curve
-        fields = ["id", "curve_name"]
+        model = SecurityIdentifier
+        fields = "__all__"
+
+
+class CurveDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CurveDescription
+        fields = ["id", "name", "description"]
+
 
 class CurvePointSerializer(serializers.ModelSerializer):
-    curve_name = serializers.CharField(source="curve.curve_name", read_only=True)
+    curve_name = serializers.CharField(source="curve_description.name", read_only=True)
+    curve_desc = serializers.CharField(source="curve_description.description", read_only=True)
 
     class Meta:
         model = CurvePoint
-        fields = ["id", "curve", "curve_name", "adate", "year", "rate"]
+        fields = ["id", "curve_description", "curve_name", "curve_desc", "adate", "year", "rate"]
+
 
 class CurveNestedSerializer(serializers.ModelSerializer):
-    curve_name = CurveSerializer(source="curve",read_only=True)
+    curve_name = CurveDescriptionSerializer(source="curve_description", read_only=True)
 
     class Meta:
         model = CurvePoint
         fields = ["id", "curve_name", "adate", "year", "rate"]
 
+
+class StressScenarioDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StressScenarioDescription
+        fields = ['id', 'name', 'description']
+
+
 class StressScenarioSerializer(serializers.ModelSerializer):
     curve_details = CurveNestedSerializer(source="curve", read_only=True)
+    scenario_details = StressScenarioDescriptionSerializer(source="scenario", read_only=True)
 
     class Meta:
         model = StressScenario
         fields = [
             "id",
-            "scenario_id",
+            "scenario",
+            "scenario_details",
             "period_number",
             "simulation_number",
-            "curve",         # foreign key ID used when POSTing
-            "curve_details", # nested object shown when GETting
+            "curve",
+            "curve_details",
             "period_length",
             "parallel_shock_size",
         ]
+
 
 class PositionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Position
         fields = "__all__"
+
 
 class ScenarioPositionSerializer(serializers.ModelSerializer):
     scenario = StressScenarioSerializer(read_only=True)
@@ -89,3 +111,28 @@ class AborPnLSerializer(serializers.ModelSerializer):
     class Meta:
         model = AborPnL
         fields = "__all__"
+
+
+class RiskCoreSerializer(serializers.ModelSerializer):
+    security_name = serializers.CharField(source="security.asset_name", read_only=True)
+    identifier_client = serializers.CharField(source="security.identifier_client", read_only=True)
+
+    class Meta:
+        model = RiskCore
+        fields = [
+            "id", "security", "security_name", "identifier_client", "risk_date",
+            "price", "yield_to_maturity", "oas", "discounted_pv"
+        ]
+
+
+class RiskScenarioSerializer(serializers.ModelSerializer):
+    security_name = serializers.CharField(source="security.asset_name", read_only=True)
+    identifier_client = serializers.CharField(source="security.identifier_client", read_only=True)
+    scenario_details = StressScenarioSerializer(source="scenario", read_only=True)
+
+    class Meta:
+        model = RiskScenario
+        fields = [
+            "id", "security", "security_name", "identifier_client", "scenario", "scenario_details",
+            "price", "yield_to_maturity", "oas", "discounted_pv"
+        ]
