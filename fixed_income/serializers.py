@@ -86,10 +86,28 @@ class ScenarioPositionSerializer(serializers.ModelSerializer):
         queryset=StressScenario.objects.all(), source="scenario", write_only=True
     )
 
+    security = VanillaBondSecMasterSerializer(read_only=True)
+    security_id = serializers.PrimaryKeyRelatedField(
+        queryset=VanillaBondSecMaster.objects.all(), source="security", write_only=True
+    )
+
     class Meta:
         model = ScenarioPosition
-        fields = "__all__"
-
+        fields = [
+            "id",
+            "scenario", "scenario_id",
+            "security", "security_id",
+            "portfolio_name",
+            "position_date",
+            "lot_id",
+            "quantity",
+            "notional_amount",
+            "par_value",
+            "book_price",
+            "book_value",
+            "discounted_price",
+            "discounted_value",
+        ]
 
 class TransactionSerializer(serializers.ModelSerializer):
     scenario = StressScenarioSerializer(read_only=True)

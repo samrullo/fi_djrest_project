@@ -12,6 +12,7 @@ class VanillaBondSecMaster(models.Model):
     )
 
     maturity = models.DateField()
+    currency = models.CharField(max_length=10, default="USD")
 
     def __str__(self):
         return f"{self.asset_name} ({self.identifier_client})"
@@ -83,6 +84,7 @@ class StressScenario(models.Model):
     def __str__(self):
         return f"{self.scenario.name} - Period {self.period_number} - Sim {self.simulation_number}"
 
+
 class RiskCore(models.Model):
     security = models.ForeignKey(
         VanillaBondSecMaster,
@@ -134,11 +136,13 @@ class Position(models.Model):
     portfolio_name = models.CharField(max_length=100)
     position_date = models.DateField()
     lot_id = models.IntegerField()
-    asset_name = models.CharField(max_length=100)
-    identifier_client = models.CharField(max_length=100)
-    identifier_isin = models.CharField(max_length=20, blank=True, null=True)
-    identifier_cusip = models.CharField(max_length=20, blank=True, null=True)
-    identifier_sedol = models.CharField(max_length=20, blank=True, null=True)
+
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="positions"
+    )
+
     quantity = models.DecimalField(max_digits=20, decimal_places=4)
     notional_amount = models.DecimalField(max_digits=20, decimal_places=4)
     par_value = models.DecimalField(max_digits=20, decimal_places=4)
@@ -148,19 +152,20 @@ class Position(models.Model):
     discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
 
     def __str__(self):
-        return f"{self.portfolio_name} - {self.asset_name} [Lot {self.lot_id}]"
-
+        return f"{self.portfolio_name} - {self.security.asset_name} [Lot {self.lot_id}]"
 
 class ScenarioPosition(models.Model):
     portfolio_name = models.CharField(max_length=100)
     scenario = models.ForeignKey(StressScenario, on_delete=models.CASCADE)
     position_date = models.DateField()
     lot_id = models.IntegerField()
-    asset_name = models.CharField(max_length=100)
-    identifier_client = models.CharField(max_length=100)
-    identifier_isin = models.CharField(max_length=20, blank=True, null=True)
-    identifier_cusip = models.CharField(max_length=20, blank=True, null=True)
-    identifier_sedol = models.CharField(max_length=20, blank=True, null=True)
+
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="scenario_positions"
+    )
+
     quantity = models.DecimalField(max_digits=20, decimal_places=4)
     notional_amount = models.DecimalField(max_digits=20, decimal_places=4)
     par_value = models.DecimalField(max_digits=20, decimal_places=4)
@@ -170,8 +175,7 @@ class ScenarioPosition(models.Model):
     discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
 
     def __str__(self):
-        return f"{self.portfolio_name} - {self.asset_name}"
-
+        return f"{self.portfolio_name} - {self.security.asset_name} [Lot {self.lot_id}]"
 
 class Transaction(models.Model):
     TRANSACTION_TYPES = [
