@@ -116,12 +116,13 @@ class AborPnLSerializer(serializers.ModelSerializer):
 class RiskCoreSerializer(serializers.ModelSerializer):
     security_name = serializers.CharField(source="security.asset_name", read_only=True)
     identifier_client = serializers.CharField(source="security.identifier_client", read_only=True)
+    curve_name = serializers.CharField(source="curve_description.name", read_only=True)
 
     class Meta:
         model = RiskCore
         fields = [
             "id", "security", "security_name", "identifier_client", "risk_date",
-            "price", "yield_to_maturity", "oas", "discounted_pv"
+            "price","accrued_interest", "yield_to_maturity", "oas", "discounted_pv","curve_description","curve_name"
         ]
 
 

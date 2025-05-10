@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 import pandas as pd
+from fi_utils.bond_valuation import calc_ytm_of_bond, calc_accrued_interest, calc_pv_of_vanilla_bond
 
 from .models import (
     VanillaBondSecMaster,
@@ -39,6 +40,50 @@ class VanillaBondSecMasterViewSet(viewsets.ModelViewSet):
     queryset = VanillaBondSecMaster.objects.all()
     serializer_class = VanillaBondSecMasterSerializer
 
+class UploadVanillaBondsCSV(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, format=None):
+        file_obj = request.FILES.get("file")
+        if not file_obj:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            df = pd.read_csv(file_obj)
+
+            required_columns = ["identifier_client", "asset_name", "fixed_coupon", "maturity"]
+            missing = [col for col in required_columns if col not in df.columns]
+            if missing:
+                return Response({"error": f"Missing columns: {missing}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Optional column
+            if "frequency" not in df.columns:
+                df["frequency"] = 2
+            else:
+                df["frequency"] = df["frequency"].fillna(2)
+
+            df["maturity"] = pd.to_datetime(df["maturity"]).dt.date
+
+            bonds = [
+                VanillaBondSecMaster(
+                    identifier_client=row["identifier_client"],
+                    asset_name=row["asset_name"],
+                    fixed_coupon=float(row["fixed_coupon"]),
+                    frequency=int(row["frequency"]),
+                    maturity=row["maturity"],
+                )
+                for _, row in df.iterrows()
+            ]
+
+            VanillaBondSecMaster.objects.bulk_create(bonds)
+
+            return Response(
+                {"status": "Upload successful", "records_created": len(bonds)},
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SecurityIdentifierViewSet(viewsets.ModelViewSet):
     queryset = SecurityIdentifier.objects.all()
@@ -48,6 +93,74 @@ class SecurityIdentifierViewSet(viewsets.ModelViewSet):
 class RiskCoreViewSet(viewsets.ModelViewSet):
     queryset = RiskCore.objects.all()
     serializer_class = RiskCoreSerializer
+
+
+
+
+class RiskCoreUploadCSV(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, format=None):
+        file_obj = request.FILES.get("file")
+        if not file_obj:
+            return Response({"error": "No file uploaded"}, status=400)
+
+        try:
+            df = pd.read_csv(file_obj)
+            required_cols = ["identifier_client", "adate", "price", "curve_name"]
+            missing = [col for col in required_cols if col not in df.columns]
+            if missing:
+                return Response({"error": f"Missing columns: {missing}"}, status=400)
+
+            df["adate"] = pd.to_datetime(df["adate"]).dt.date
+            adate = df["adate"].iloc[0]
+
+            # Fetch curve points
+            curve_name = df["curve_name"].iloc[0]
+            try:
+                curve_desc = CurveDescription.objects.get(name=curve_name)
+            except CurveDescription.DoesNotExist:
+                return Response({"error": f"CurveDescription '{curve_name}' not found."}, status=400)
+
+            curve_points = CurvePoint.objects.filter(curve_description=curve_desc, adate=adate)
+            curve = {float(p.year): p.rate for p in curve_points}
+
+            records = []
+            for _, row in df.iterrows():
+                try:
+                    bond = VanillaBondSecMaster.objects.get(identifier_client=row["identifier_client"])
+                except VanillaBondSecMaster.DoesNotExist:
+                    continue  # skip unknown bonds
+
+                maturity = bond.maturity
+                coupon = float(bond.fixed_coupon)
+                price = float(row["price"])
+
+                ai = calc_accrued_interest(adate, maturity, coupon)
+                dirty_price = price + ai
+                ytm = calc_ytm_of_bond(dirty_price, coupon, adate, maturity)
+                pv = calc_pv_of_vanilla_bond(adate, maturity, coupon, curve)
+
+                rc = RiskCore(
+                    security=bond,
+                    risk_date=adate,
+                    price=price,
+                    yield_to_maturity=ytm,
+                    oas=0.0,  # Placeholder unless provided
+                    discounted_pv=pv,
+                    accrued_interest=ai
+                )
+                records.append(rc)
+
+            RiskCore.objects.bulk_create(records)
+
+            return Response({
+                "status": "Upload successful",
+                "records_created": len(records)
+            }, status=201)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 
 class RiskScenarioViewSet(viewsets.ModelViewSet):

@@ -1,6 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (VanillaBondSecMasterViewSet, RiskCoreViewSet, RiskScenarioViewSet,
+from .views import (VanillaBondSecMasterViewSet,
+                    UploadVanillaBondsCSV,
+                    RiskCoreViewSet,
+                    RiskCoreUploadCSV,
+                    RiskScenarioViewSet,
                     PositionViewSet,
                     ScenarioPositionViewSet,
                     TransactionViewSet,
@@ -35,6 +39,8 @@ router.register(r"aborpnls", AborPnLViewSet, "aborpnl")
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("upload-vanilla-bonds/", UploadVanillaBondsCSV.as_view(), name="upload-vanilla-bonds"),
+    path("upload-calc-risk-cores/",RiskCoreUploadCSV.as_view(),name="upload-calc-risk-cores"),
     path("upload-positions/", PositionUploadCSV.as_view(), name="upload-positions"),
     path('upload-curve/', CurveUploadCSV.as_view(), name='upload-curve'),
     path("curve-points/by-date/<str:curve_name>/<str:adate>/", FilteredCurveView.as_view(), name="filtered-curve"),

@@ -27,23 +27,6 @@ class SecurityIdentifier(models.Model):
     identifier_value = models.CharField(max_length=100)
 
 
-class RiskCore(models.Model):
-    security = models.ForeignKey(
-        VanillaBondSecMaster,
-        on_delete=models.CASCADE,
-        related_name="risk_core_data"
-    )
-    risk_date = models.DateField(help_text="As-of date for risk metrics")
-
-    price = models.FloatField()
-    yield_to_maturity = models.FloatField()
-    oas = models.FloatField(help_text="Option-Adjusted Spread")
-    discounted_pv = models.FloatField()
-
-    def __str__(self):
-        return f"RiskCore [{self.risk_date}] for {self.security.identifier_client} @ Price {self.price}"
-
-
 class CurveDescription(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
@@ -99,6 +82,28 @@ class StressScenario(models.Model):
 
     def __str__(self):
         return f"{self.scenario.name} - Period {self.period_number} - Sim {self.simulation_number}"
+
+class RiskCore(models.Model):
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="risk_core_data"
+    )
+    curve_description = models.ForeignKey(
+        CurveDescription,
+        on_delete=models.CASCADE,
+        related_name="risk_core_entries"
+    )
+    risk_date = models.DateField(help_text="As-of date for risk metrics")
+
+    price = models.FloatField()
+    yield_to_maturity = models.FloatField()
+    oas = models.FloatField(help_text="Option-Adjusted Spread")
+    discounted_pv = models.FloatField()
+    accrued_interest = models.FloatField(help_text="Accrued interest as of risk_date")
+
+    def __str__(self):
+        return f"RiskCore [{self.risk_date}] for {self.security.identifier_client} using {self.curve_description.name}"
 
 
 class RiskScenario(models.Model):
