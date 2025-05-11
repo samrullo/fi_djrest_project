@@ -75,10 +75,32 @@ class StressScenarioSerializer(serializers.ModelSerializer):
 
 
 class PositionSerializer(serializers.ModelSerializer):
+    security = VanillaBondSecMasterSerializer(read_only=True)
+    security_id = serializers.PrimaryKeyRelatedField(
+        queryset=VanillaBondSecMaster.objects.all(), source="security", write_only=True
+    )
+
+    risk_core = serializers.StringRelatedField(read_only=True)
+    risk_core_id = serializers.PrimaryKeyRelatedField(
+        queryset=RiskCore.objects.all(), source="risk_core", write_only=True, required=False, allow_null=True
+    )
+
     class Meta:
         model = Position
-        fields = "__all__"
-
+        fields = [
+            "id",
+            "security", "security_id",
+            "risk_core", "risk_core_id",
+            "portfolio_name",
+            "position_date",
+            "lot_id",
+            "quantity",
+            "notional_amount",
+            "par_value",
+            "book_price",
+            "book_value",
+            "discounted_value",
+        ]
 
 class ScenarioPositionSerializer(serializers.ModelSerializer):
     scenario = StressScenarioSerializer(read_only=True)
@@ -91,12 +113,18 @@ class ScenarioPositionSerializer(serializers.ModelSerializer):
         queryset=VanillaBondSecMaster.objects.all(), source="security", write_only=True
     )
 
+    risk_scenario = serializers.StringRelatedField(read_only=True)
+    risk_scenario_id = serializers.PrimaryKeyRelatedField(
+        queryset=RiskScenario.objects.all(), source="risk_scenario", write_only=True, required=False, allow_null=True
+    )
+
     class Meta:
         model = ScenarioPosition
         fields = [
             "id",
             "scenario", "scenario_id",
             "security", "security_id",
+            "risk_scenario", "risk_scenario_id",
             "portfolio_name",
             "position_date",
             "lot_id",
@@ -105,7 +133,6 @@ class ScenarioPositionSerializer(serializers.ModelSerializer):
             "par_value",
             "book_price",
             "book_value",
-            "discounted_price",
             "discounted_value",
         ]
 

@@ -143,12 +143,20 @@ class Position(models.Model):
         related_name="positions"
     )
 
+    risk_core = models.ForeignKey(
+        "RiskCore",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="positions",
+        help_text="Linked RiskCore based on position_date and security"
+    )
+
     quantity = models.DecimalField(max_digits=20, decimal_places=4)
     notional_amount = models.DecimalField(max_digits=20, decimal_places=4)
     par_value = models.DecimalField(max_digits=20, decimal_places=4)
     book_price = models.DecimalField(max_digits=10, decimal_places=4)
     book_value = models.DecimalField(max_digits=20, decimal_places=4)
-    discounted_price = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
 
     def __str__(self):
@@ -171,8 +179,15 @@ class ScenarioPosition(models.Model):
     par_value = models.DecimalField(max_digits=20, decimal_places=4)
     book_price = models.DecimalField(max_digits=20, decimal_places=4)
     book_value = models.DecimalField(max_digits=20, decimal_places=4)
-    discounted_price = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
+
+    risk_scenario = models.ForeignKey(
+        'RiskScenario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Linked RiskScenario based on scenario and security."
+    )
 
     def __str__(self):
         return f"{self.portfolio_name} - {self.security.asset_name} [Lot {self.lot_id}]"
@@ -186,10 +201,16 @@ class Transaction(models.Model):
     ]
 
     portfolio_name = models.CharField(max_length=100)
-    identifier_client = models.CharField(max_length=100)
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="transactions"
+    )
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPES)
     transaction_date = models.DateField()
     transaction_price = models.DecimalField(max_digits=20, decimal_places=4)
+    quantity = models.FloatField()
+    amount = models.FloatField()
     lot_id = models.IntegerField()
     scenario = models.ForeignKey(StressScenario, on_delete=models.CASCADE)
 
@@ -201,7 +222,11 @@ class Transaction(models.Model):
 
 class AborPnL(models.Model):
     portfolio_name = models.CharField(max_length=100)
-    identifier_client = models.CharField(max_length=100)
+    security = models.ForeignKey(
+        VanillaBondSecMaster,
+        on_delete=models.CASCADE,
+        related_name="abor_pnls"
+    )
     scenario = models.ForeignKey(StressScenario, on_delete=models.CASCADE)
     period_date = models.DateField()
     begin_period_date = models.DateField()
