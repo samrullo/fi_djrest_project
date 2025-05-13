@@ -4,6 +4,7 @@ from .models import (
     SecurityIdentifier,
     CurveDescription,
     CurvePoint,
+CurvePointShock,
     StressScenario,
     Position,
     ScenarioPosition,
@@ -54,10 +55,39 @@ class StressScenarioDescriptionSerializer(serializers.ModelSerializer):
         model = StressScenarioDescription
         fields = ['id', 'name', 'description']
 
+class CurvePointShockSerializer(serializers.ModelSerializer):
+    curve_point_details = serializers.SerializerMethodField()
+    stress_scenario_details = serializers.SerializerMethodField()
 
+    class Meta:
+        model = CurvePointShock
+        fields = [
+            "id",
+            "curve_point",
+            "curve_point_details",
+            "shock_size",
+            "stress_scenario",  # assuming this field exists
+            "stress_scenario_details",
+        ]
+
+    def get_curve_point_details(self, obj):
+        return {
+            "curve_name": obj.curve_point.curve_description.name,
+            "adate": obj.curve_point.adate,
+            "year": obj.curve_point.year,
+            "rate": obj.curve_point.rate,
+        }
+
+    def get_stress_scenario_details(self, obj):
+        scenario = obj.stress_scenario
+        return {
+            "scenario_name": scenario.scenario.name,
+            "period_number": scenario.period_number,
+            "simulation_number": scenario.simulation_number,
+        }
 class StressScenarioSerializer(serializers.ModelSerializer):
-    curve_details = CurveNestedSerializer(source="curve", read_only=True)
     scenario_details = StressScenarioDescriptionSerializer(source="scenario", read_only=True)
+    curve_point_shocks = CurvePointShockSerializer(many=True, read_only=True)
 
     class Meta:
         model = StressScenario
@@ -67,12 +97,9 @@ class StressScenarioSerializer(serializers.ModelSerializer):
             "scenario_details",
             "period_number",
             "simulation_number",
-            "curve",
-            "curve_details",
             "period_length",
-            "parallel_shock_size",
+            "curve_point_shocks"
         ]
-
 
 class PositionSerializer(serializers.ModelSerializer):
     security = VanillaBondSecMasterSerializer(read_only=True)

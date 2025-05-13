@@ -70,20 +70,33 @@ class StressScenario(models.Model):
     )
     period_number = models.IntegerField()
     simulation_number = models.IntegerField()
-    curve = models.ForeignKey(
-        CurvePoint,
-        on_delete=models.CASCADE,
-        help_text="Reference to curve point for given name/date/year",
-    )
     period_length = models.FloatField(help_text="Length in years")
-    parallel_shock_size = models.FloatField(help_text="Shock size in percentages")
 
     class Meta:
-        unique_together = ("scenario", "period_number", "simulation_number", "curve")
+        unique_together = ("scenario", "period_number", "simulation_number")
 
     def __str__(self):
         return f"{self.scenario.name} - Period {self.period_number} - Sim {self.simulation_number}"
 
+
+class CurvePointShock(models.Model):
+    stress_scenario = models.ForeignKey(
+        StressScenario,
+        on_delete=models.CASCADE,
+        related_name="curve_point_shocks"
+    )
+    curve_point = models.ForeignKey(
+        CurvePoint,
+        on_delete=models.CASCADE,
+        help_text="Reference to curve point (curve_name, adate, year, rate)"
+    )
+    shock_size = models.FloatField(help_text="Shock size in percentages")
+
+    class Meta:
+        unique_together = ("stress_scenario", "curve_point")
+
+    def __str__(self):
+        return f"Shock {self.shock_size}% on {self.curve_point} in {self.stress_scenario}"
 
 class RiskCore(models.Model):
     security = models.ForeignKey(

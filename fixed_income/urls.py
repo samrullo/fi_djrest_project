@@ -15,7 +15,7 @@ from .views import (VanillaBondSecMasterViewSet,
                     AborPnLViewSet,
                     PositionUploadCSV,
                     CurveUploadCSV,
-                    StressScenarioUploadCSV
+                    StressScenarioUploadCSV, CurvePointShockViewSet
                     )
 from .views import StressScenarioDescriptionViewSet
 
@@ -28,6 +28,7 @@ router.register(r"scenario-positions", ScenarioPositionViewSet, "scenario-positi
 router.register(r"transactions", TransactionViewSet, "transaction")
 router.register(r"curve-descriptions", CurveDescriptionViewSet, "curve-description")
 router.register(r"curve-points", CurvePointViewSet, "curve-point")
+router.register(r"curve-point-shocks",CurvePointShockViewSet, "curve-point-shock")
 
 router.register(
     r"stress-scenario-descriptions",

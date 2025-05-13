@@ -12,6 +12,7 @@ from .models import (
     RiskScenario,
     CurveDescription,
     CurvePoint,
+    CurvePointShock,
     StressScenario,
     Position,
     ScenarioPosition,
@@ -27,6 +28,7 @@ from .serializers import (
     RiskScenarioSerializer,
     CurveDescriptionSerializer,
     CurvePointSerializer,
+    CurvePointShockSerializer,
     StressScenarioSerializer,
     PositionSerializer,
     ScenarioPositionSerializer,
@@ -39,6 +41,7 @@ from .serializers import (
 class VanillaBondSecMasterViewSet(viewsets.ModelViewSet):
     queryset = VanillaBondSecMaster.objects.all()
     serializer_class = VanillaBondSecMasterSerializer
+
 
 class UploadVanillaBondsCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -85,6 +88,7 @@ class UploadVanillaBondsCSV(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class SecurityIdentifierViewSet(viewsets.ModelViewSet):
     queryset = SecurityIdentifier.objects.all()
     serializer_class = SecurityIdentifierSerializer
@@ -93,8 +97,6 @@ class SecurityIdentifierViewSet(viewsets.ModelViewSet):
 class RiskCoreViewSet(viewsets.ModelViewSet):
     queryset = RiskCore.objects.all()
     serializer_class = RiskCoreSerializer
-
-
 
 
 class RiskCoreUploadCSV(APIView):
@@ -194,6 +196,11 @@ class StressScenarioDescriptionViewSet(viewsets.ModelViewSet):
     serializer_class = StressScenarioDescriptionSerializer
 
 
+class CurvePointShockViewSet(viewsets.ModelViewSet):
+    queryset = CurvePointShock.objects.all()
+    serializer_class = CurvePointShockSerializer
+
+
 class StressScenarioViewSet(viewsets.ModelViewSet):
     queryset = StressScenario.objects.all()
     serializer_class = StressScenarioSerializer
@@ -225,6 +232,7 @@ class ScenarioPositionViewSet(viewsets.ModelViewSet):
 
         self.perform_create(serializer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all()
@@ -366,6 +374,20 @@ class FilteredCurveView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from rest_framework import status
+import pandas as pd
+from .models import (
+    StressScenarioDescription,
+    StressScenario,
+    CurvePoint,
+    CurvePointShock,
+    CurveDescription,
+)
+
+
 class StressScenarioUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
@@ -388,10 +410,30 @@ class StressScenarioUploadCSV(APIView):
 
             df["curve_adate"] = pd.to_datetime(df["curve_adate"]).dt.date
 
-            records = []
-            for _, row in df.iterrows():
-                scenario_desc, _ = StressScenarioDescription.objects.get_or_create(name=row["scenario_name"])
+            scenario_cache = {}
+            shock_records = []
 
+            for _, row in df.iterrows():
+                # Get or create StressScenarioDescription
+                scenario_desc, _ = StressScenarioDescription.objects.get_or_create(
+                    name=row["scenario_name"]
+                )
+
+                key = (scenario_desc.id, row["period_number"], row["simulation_number"])
+
+                # Cache StressScenario to avoid redundant DB calls
+                if key not in scenario_cache:
+                    stress_scenario, _ = StressScenario.objects.get_or_create(
+                        scenario=scenario_desc,
+                        period_number=row["period_number"],
+                        simulation_number=row["simulation_number"],
+                        defaults={"period_length": row["period_length"]}
+                    )
+                    scenario_cache[key] = stress_scenario
+                else:
+                    stress_scenario = scenario_cache[key]
+
+                # Get CurvePoint
                 try:
                     curve_desc = CurveDescription.objects.get(name=row["curve_name"])
                     curve_point = CurvePoint.objects.get(
@@ -401,21 +443,20 @@ class StressScenarioUploadCSV(APIView):
                     )
                 except CurvePoint.DoesNotExist:
                     return Response({
-                        "error": f"CurvePoint not found for {row['curve_name']} {row['curve_adate']} y{row['curve_year']}"},
-                        status=400)
+                        "error": f"CurvePoint not found: {row['curve_name']} - {row['curve_adate']} - Year {row['curve_year']}"
+                    }, status=400)
 
-                record = StressScenario(
-                    scenario=scenario_desc,
-                    period_number=int(row["period_number"]),
-                    simulation_number=int(row["simulation_number"]),
-                    curve=curve_point,
-                    period_length=float(row["period_length"]),
-                    parallel_shock_size=float(row["parallel_shock_size"]),
+                # Create CurvePointShock (no bulk_create because we might want unique_together constraints to raise)
+                shock = CurvePointShock(
+                    stress_scenario=stress_scenario,
+                    curve_point=curve_point,
+                    shock_size=row["parallel_shock_size"]
                 )
-                records.append(record)
+                shock_records.append(shock)
 
-            StressScenario.objects.bulk_create(records)
-            return Response({"status": "Upload successful", "rows": len(records)}, status=201)
+            CurvePointShock.objects.bulk_create(shock_records, ignore_conflicts=True)
+
+            return Response({"status": "Upload successful", "rows": len(shock_records)}, status=201)
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
