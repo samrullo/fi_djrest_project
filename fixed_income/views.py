@@ -256,44 +256,83 @@ class PositionUploadCSV(APIView):
             df = pd.read_csv(file_obj)
 
             required_columns = [
-                "portfolio_name", "scenario_id", "period_number", "simulation_number",
-                "position_date", "lot_id", "asset_name", "identifier_client",
-                "quantity", "notional_amount", "par_value", "book_price", "book_value",
+                "portfolio_name", "position_date", "identifier_client",
+                "quantity", "book_price", "curve_name"
             ]
-
             missing = [col for col in required_columns if col not in df.columns]
             if missing:
                 return Response({"error": f"Missing required columns: {missing}"}, status=400)
 
-            records = []
+            df["position_date"] = pd.to_datetime(df["position_date"]).dt.date
+            position_records = []
+
             for _, row in df.iterrows():
-                records.append(
-                    ScenarioPosition(
-                        portfolio_name=row["portfolio_name"],
-                        scenario_id=int(row["scenario_id"]),
-                        period_number=int(row["period_number"]),
-                        simulation_number=int(row["simulation_number"]),
-                        position_date=pd.to_datetime(row["position_date"]).date(),
-                        lot_id=int(row["lot_id"]),
-                        asset_name=row["asset_name"],
-                        identifier_client=row["identifier_client"],
-                        identifier_isin=row.get("identifier_isin"),
-                        identifier_cusip=row.get("identifier_cusip"),
-                        identifier_sedol=row.get("identifier_sedol"),
-                        quantity=row["quantity"],
-                        notional_amount=row["notional_amount"],
-                        par_value=row["par_value"],
-                        book_price=row["book_price"],
-                        book_value=row["book_value"],
-                    )
+                identifier = row["identifier_client"]
+                curve_name = row["curve_name"]
+                position_date = row["position_date"]
+
+                try:
+                    security = VanillaBondSecMaster.objects.get(identifier_client=identifier)
+                except VanillaBondSecMaster.DoesNotExist:
+                    return Response({"error": f"Security with identifier '{identifier}' not found."}, status=400)
+
+                try:
+                    curve_desc = CurveDescription.objects.get(name=curve_name)
+                except CurveDescription.DoesNotExist:
+                    return Response({"error": f"Curve '{curve_name}' not found."}, status=400)
+
+                curve_points = CurvePoint.objects.filter(
+                    curve_description=curve_desc,
+                    adate=position_date
+                )
+                if not curve_points.exists():
+                    return Response({"error": f"No curve points for {curve_name} on {position_date}."}, status=400)
+
+                quantity = float(row["quantity"])
+                book_price = float(row["book_price"])
+
+                notional_amount = quantity * book_price / 100
+                par_value = quantity
+                book_value = notional_amount
+
+                ai = calc_accrued_interest(position_date, security.maturity, security.coupon)
+                dirty_price = book_price + ai
+                ytm = calc_ytm_of_bond(dirty_price, security.coupon, position_date, security.maturity)
+                pv = calc_pv_of_vanilla_bond(position_date, security.maturity, security.coupon, curve_points)
+
+                # Create RiskCore record
+                risk_core = RiskCore.objects.create(
+                    security=security,
+                    risk_date=position_date,
+                    curve_description=curve_desc,
+                    price=book_price,
+                    accrued_interest=ai,
+                    yield_to_maturity=ytm,
+                    discounted_pv=pv
                 )
 
-            ScenarioPosition.objects.bulk_create(records)
-            return Response({"status": "Upload successful", "rows": len(records)}, status=201)
+                discounted_value = quantity * pv / 100
+
+                position = Position(
+                    security=security,
+                    portfolio_name=row["portfolio_name"],
+                    position_date=position_date,
+                    quantity=quantity,
+                    notional_amount=notional_amount,
+                    par_value=par_value,
+                    book_price=book_price,
+                    book_value=book_value,
+                    discounted_value=discounted_value,
+                    risk_core=risk_core
+                )
+
+                position_records.append(position)
+
+            Position.objects.bulk_create(position_records)
+            return Response({"status": "Upload successful", "rows": len(position_records)}, status=201)
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
-
 
 class CurveUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
