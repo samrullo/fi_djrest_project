@@ -4,13 +4,10 @@ from django.db import models
 class VanillaBondSecMaster(models.Model):
     identifier_client = models.CharField(max_length=100)
     asset_name = models.CharField(max_length=100)
-
-    fixed_coupon = models.DecimalField(max_digits=10, decimal_places=4)
-
+    fixed_coupon = models.FloatField()
     frequency = models.IntegerField(
         default=2, help_text="Number of coupon payments per year (default is 2)"
     )
-
     maturity = models.DateField()
     currency = models.CharField(max_length=10, default="USD")
 
@@ -98,6 +95,7 @@ class CurvePointShock(models.Model):
     def __str__(self):
         return f"Shock {self.shock_size}% on {self.curve_point} in {self.stress_scenario}"
 
+
 class RiskCore(models.Model):
     security = models.ForeignKey(
         VanillaBondSecMaster,
@@ -110,7 +108,6 @@ class RiskCore(models.Model):
         related_name="risk_core_entries"
     )
     risk_date = models.DateField(help_text="As-of date for risk metrics")
-
     price = models.FloatField()
     yield_to_maturity = models.FloatField()
     oas = models.FloatField(help_text="Option-Adjusted Spread")
@@ -132,7 +129,6 @@ class RiskScenario(models.Model):
         on_delete=models.CASCADE,
         related_name="risk_analytics"
     )
-
     price = models.FloatField()
     yield_to_maturity = models.FloatField()
     oas = models.FloatField(help_text="Option-Adjusted Spread")
@@ -149,13 +145,11 @@ class Position(models.Model):
     portfolio_name = models.CharField(max_length=100)
     position_date = models.DateField()
     lot_id = models.IntegerField()
-
     security = models.ForeignKey(
         VanillaBondSecMaster,
         on_delete=models.CASCADE,
         related_name="positions"
     )
-
     risk_core = models.ForeignKey(
         "RiskCore",
         on_delete=models.SET_NULL,
@@ -164,36 +158,33 @@ class Position(models.Model):
         related_name="positions",
         help_text="Linked RiskCore based on position_date and security"
     )
-
-    quantity = models.DecimalField(max_digits=20, decimal_places=4)
-    notional_amount = models.DecimalField(max_digits=20, decimal_places=4)
-    par_value = models.DecimalField(max_digits=20, decimal_places=4)
-    book_price = models.DecimalField(max_digits=10, decimal_places=4)
-    book_value = models.DecimalField(max_digits=20, decimal_places=4)
-    discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
+    quantity = models.FloatField()
+    notional_amount = models.FloatField()
+    par_value = models.FloatField()
+    book_price = models.FloatField()
+    book_value = models.FloatField()
+    discounted_value = models.FloatField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.portfolio_name} - {self.security.asset_name} [Lot {self.lot_id}]"
+
 
 class ScenarioPosition(models.Model):
     portfolio_name = models.CharField(max_length=100)
     scenario = models.ForeignKey(StressScenario, on_delete=models.CASCADE)
     position_date = models.DateField()
     lot_id = models.IntegerField()
-
     security = models.ForeignKey(
         VanillaBondSecMaster,
         on_delete=models.CASCADE,
         related_name="scenario_positions"
     )
-
-    quantity = models.DecimalField(max_digits=20, decimal_places=4)
-    notional_amount = models.DecimalField(max_digits=20, decimal_places=4)
-    par_value = models.DecimalField(max_digits=20, decimal_places=4)
-    book_price = models.DecimalField(max_digits=20, decimal_places=4)
-    book_value = models.DecimalField(max_digits=20, decimal_places=4)
-    discounted_value = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
-
+    quantity = models.FloatField()
+    notional_amount = models.FloatField()
+    par_value = models.FloatField()
+    book_price = models.FloatField()
+    book_value = models.FloatField()
+    discounted_value = models.FloatField(blank=True, null=True)
     risk_scenario = models.ForeignKey(
         'RiskScenario',
         on_delete=models.SET_NULL,
@@ -205,6 +196,7 @@ class ScenarioPosition(models.Model):
     def __str__(self):
         return f"{self.portfolio_name} - {self.security.asset_name} [Lot {self.lot_id}]"
 
+
 class Transaction(models.Model):
     TRANSACTION_TYPES = [
         ("BUY", "Buy"),
@@ -212,7 +204,6 @@ class Transaction(models.Model):
         ("CASH_IN", "Cash In"),
         ("CASH_OUT", "Cash Out"),
     ]
-
     portfolio_name = models.CharField(max_length=100)
     security = models.ForeignKey(
         VanillaBondSecMaster,
@@ -221,7 +212,7 @@ class Transaction(models.Model):
     )
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPES)
     transaction_date = models.DateField()
-    transaction_price = models.DecimalField(max_digits=20, decimal_places=4)
+    transaction_price = models.FloatField()
     quantity = models.FloatField()
     amount = models.FloatField()
     lot_id = models.IntegerField()
@@ -244,9 +235,9 @@ class AborPnL(models.Model):
     period_date = models.DateField()
     begin_period_date = models.DateField()
     end_period_date = models.DateField()
-    income_pnl = models.DecimalField(max_digits=20, decimal_places=4)
-    amortization_accretion_pnl = models.DecimalField(max_digits=20, decimal_places=4)
-    realized_gain_loss_pnl = models.DecimalField(max_digits=20, decimal_places=4)
+    income_pnl = models.FloatField()
+    amortization_accretion_pnl = models.FloatField()
+    realized_gain_loss_pnl = models.FloatField()
 
     def __str__(self):
         return f"{self.portfolio_name} - PnL for Scenario {self.scenario.scenario_id}, Period {self.scenario.period_number}, Sim {self.scenario.simulation_number}"

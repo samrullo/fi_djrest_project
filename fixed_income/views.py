@@ -281,12 +281,15 @@ class PositionUploadCSV(APIView):
                 except CurveDescription.DoesNotExist:
                     return Response({"error": f"Curve '{curve_name}' not found."}, status=400)
 
-                curve_points = CurvePoint.objects.filter(
+                curve_points_qs = CurvePoint.objects.filter(
                     curve_description=curve_desc,
                     adate=position_date
                 )
-                if not curve_points.exists():
+                if not curve_points_qs.exists():
                     return Response({"error": f"No curve points for {curve_name} on {position_date}."}, status=400)
+
+                curve_points = list(curve_points_qs.order_by("year"))
+                curve_dict = {float(cp.year): cp.rate for cp in curve_points}
 
                 quantity = float(row["quantity"])
                 book_price = float(row["book_price"])
@@ -295,12 +298,11 @@ class PositionUploadCSV(APIView):
                 par_value = quantity
                 book_value = notional_amount
 
-                ai = calc_accrued_interest(position_date, security.maturity, security.coupon)
+                ai = calc_accrued_interest(position_date, security.maturity, security.fixed_coupon)
                 dirty_price = book_price + ai
-                ytm = calc_ytm_of_bond(dirty_price, security.coupon, position_date, security.maturity)
-                pv = calc_pv_of_vanilla_bond(position_date, security.maturity, security.coupon, curve_points)
+                ytm = calc_ytm_of_bond(dirty_price, security.fixed_coupon, position_date, security.maturity)
+                pv = calc_pv_of_vanilla_bond(position_date, security.maturity, security.fixed_coupon, curve_dict, freq=security.frequency)
 
-                # Create RiskCore record
                 risk_core = RiskCore.objects.create(
                     security=security,
                     risk_date=position_date,
@@ -308,7 +310,8 @@ class PositionUploadCSV(APIView):
                     price=book_price,
                     accrued_interest=ai,
                     yield_to_maturity=ytm,
-                    discounted_pv=pv
+                    discounted_pv=pv,
+                    oas=0.0  # default value or replace with your logic
                 )
 
                 discounted_value = quantity * pv / 100

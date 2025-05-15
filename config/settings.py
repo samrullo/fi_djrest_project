@@ -17,6 +17,19 @@ SECRET_KEY = "django-insecure-lb318y&t#m!@-_0ez-3wa#*)lldwrrqp!n0@6!i!3+104ycsfm
 DEBUG = True
 ALLOWED_HOSTS = []
 
+LOGGING = {
+    "version": 1,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "DEBUG",
+    },
+}
+
 CORS_ORIGIN_WHITELIST = ["http://localhost:3000"]
 CORS_ALLOW_CREDENTIALS = True
 
