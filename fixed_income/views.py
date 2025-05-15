@@ -311,7 +311,7 @@ class PositionUploadCSV(APIView):
                     accrued_interest=ai,
                     yield_to_maturity=ytm,
                     discounted_pv=pv,
-                    oas=0.0  # default value or replace with your logic
+                    oas=0.0
                 )
 
                 discounted_value = quantity * pv / 100
@@ -320,6 +320,7 @@ class PositionUploadCSV(APIView):
                     security=security,
                     portfolio_name=row["portfolio_name"],
                     position_date=position_date,
+                    lot_id=0,  # <-- Set lot_id to 0
                     quantity=quantity,
                     notional_amount=notional_amount,
                     par_value=par_value,
