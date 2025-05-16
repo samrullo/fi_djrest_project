@@ -56,11 +56,45 @@ Then calculate ```discounted_value``` of Position using below logic
 # ScenarioPositions based on Position
 We will create Django API view function that will take ```portfolio``` and ```position_date``` as input.
 It will also take ```scenario_name``` as input to query ```ScenarioDescription``` and then ```StressScenario``` using scenario description foreign key.
-Then for each period number, simulation number in StressScenario we will populate ScenarioPositions.
-Below is the logic for each field of ScenarioPosition records
-- portfolio_name : from Position.portfolio_name
-- scenario : foreign key to StressScenario. There will be one record per ("scenario", "period_number", "simulation_number", "curve_point")
+Then for each period number, simulation number in ```StressScenario``` we will populate ```ScenarioPositions```.
+For each combination of period number, simulation number, retrieve ```curve_point_shocks``` and use that 
+to construct new curve which will be used to calculate PVs for that period and simulation.
+A ```curve_point_shock``` represents a shock in percentages to a curve point. 
+For instance, a curve_point_shock mmight mean something like USD_SWAP curve as of 4/30/2025, year 1 rate, apply shock of 0.25 or -0.25 percent.
+We will use ```curve_point_shocks``` to construct a new curve and calculate Present Values of positions using new curve for each period number and simulation number.
 
+Based on portfolio and position_date query Position records and populate ScenarioPositions for each period and simulation.
+For a given period number and simulation number first insert ScenarioPosition records with below fields. discounted_value will be calculated after populating RiskScenarios
+ScenarioPosition records to populate first
+- portfolio_name : from Position.portfolio_name
+- scenario : foreign key to StressScenario.
+- position_date : specified position date
+- lot_id : lot_id from Position table.
+- security : security from Position
+- quantity : quantity from Position
+- notional_amount : book_price/100 * quantity
+- par_value : quantity
+- book_price : book_price from Position record
+- book_value : book_price/100 * quantity
+
+
+After querying Positions and inserting ScenarioPosition record above
+populate RiskScenario for each period number and simulation number as below
+- security : security from Positions
+- scenario : reference to StressScenario record for a given period number and simulation number
+- price : book_price from ScenarioPositions 
+- accrued_interest : calculate it using ```calc_accrued_interest(adate, maturity, coupon)```. adate is position_date, maturity and coupon get from security information
+- yield_to_maturity : calculate based on price
+- discounted_pv : calculate it by using reconstructed curve above. Use below code as reference when calculating discounted_pv
+```python
+dirty_price = price + ai
+ytm = calc_ytm_of_bond(dirty_price, coupon, adate, maturity)
+pv = calc_pv_of_vanilla_bond(adate, maturity, coupon, curve)
+``` 
+
+Finally populate remaining columns of ScenarioPosition record
+- risk_scenario : reference to RiskScenario record above
+- discounted_value : risk_scenario.discounted_pv/100 * quantity
 
 # Designing Stress Scenarios
 I am building models to define simple stress scenarios where I will define shocks for each point on a curve.

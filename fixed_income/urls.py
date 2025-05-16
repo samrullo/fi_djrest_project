@@ -14,6 +14,7 @@ from .views import (VanillaBondSecMasterViewSet,
                     StressScenarioViewSet,
                     AborPnLViewSet,
                     PositionUploadCSV,
+GenerateScenarioPositions,
                     CurveUploadCSV,
                     StressScenarioUploadCSV, CurvePointShockViewSet
                     )
@@ -43,6 +44,7 @@ urlpatterns = [
     path("upload-vanilla-bonds/", UploadVanillaBondsCSV.as_view(), name="upload-vanilla-bonds"),
     path("upload-calc-risk-cores/",RiskCoreUploadCSV.as_view(),name="upload-calc-risk-cores"),
     path("upload-positions/", PositionUploadCSV.as_view(), name="upload-positions"),
+    path("generate-scenario-positions/", GenerateScenarioPositions.as_view(),name="generate-scenario-positions"),
     path('upload-curve/', CurveUploadCSV.as_view(), name='upload-curve'),
     path("curve-points/by-date/<str:curve_name>/<str:adate>/", FilteredCurveView.as_view(), name="filtered-curve"),
     path("upload-stress-scenarios/", StressScenarioUploadCSV.as_view(), name="upload-stress-scenarios"),

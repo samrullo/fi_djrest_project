@@ -133,6 +133,7 @@ class RiskScenario(models.Model):
     yield_to_maturity = models.FloatField()
     oas = models.FloatField(help_text="Option-Adjusted Spread")
     discounted_pv = models.FloatField()
+    accrued_interest = models.FloatField(help_text="Accrued interest as of risk_date")
 
     def __str__(self):
         return (

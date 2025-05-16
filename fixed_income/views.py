@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pandas as pd
 from fi_utils.bond_valuation import calc_ytm_of_bond, calc_accrued_interest, calc_pv_of_vanilla_bond
 
@@ -500,6 +500,92 @@ class StressScenarioUploadCSV(APIView):
             CurvePointShock.objects.bulk_create(shock_records, ignore_conflicts=True)
 
             return Response({"status": "Upload successful", "rows": len(shock_records)}, status=201)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+class GenerateScenarioPositions(APIView):
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        try:
+            portfolio_name = request.data.get("portfolio_name")
+            position_date = request.data.get("position_date")
+            scenario_name = request.data.get("scenario_name")
+
+            if not (portfolio_name and position_date and scenario_name):
+                return Response({"error": "portfolio_name, position_date, and scenario_name are required."}, status=400)
+
+            position_date = pd.to_datetime(position_date).date()
+            positions = Position.objects.filter(portfolio_name=portfolio_name, position_date=position_date)
+            if not positions.exists():
+                return Response({"error": "No positions found for given portfolio and date."}, status=404)
+
+            try:
+                scenario_description = StressScenarioDescription.objects.get(name=scenario_name)
+            except StressScenarioDescription.DoesNotExist:
+                return Response({"error": f"ScenarioDescription '{scenario_name}' not found."}, status=404)
+
+            scenarios = StressScenario.objects.filter(scenario=scenario_description)
+            if not scenarios.exists():
+                return Response({"error": f"No StressScenario entries found for scenario '{scenario_name}'."}, status=404)
+
+            for scenario in scenarios:
+                shocks = CurvePointShock.objects.filter(stress_scenario=scenario)
+                if not shocks.exists():
+                    continue
+
+                # Create curve dict
+                curve = {}
+                for shock in shocks:
+                    cp = shock.curve_point
+                    shocked_rate = cp.rate + shock.shock_size
+                    curve[float(cp.year)] = shocked_rate
+
+                scenario_positions = []
+                risk_scenarios = []
+                for pos in positions:
+                    sec = pos.security
+
+                    notional_amount = pos.book_price * pos.quantity / 100
+                    book_value = notional_amount
+                    par_value = pos.quantity
+
+                    scen_pos = ScenarioPosition(
+                        portfolio_name=pos.portfolio_name,
+                        scenario=scenario,
+                        position_date=position_date,
+                        lot_id=pos.lot_id,
+                        security=sec,
+                        quantity=pos.quantity,
+                        notional_amount=notional_amount,
+                        par_value=par_value,
+                        book_price=pos.book_price,
+                        book_value=book_value
+                    )
+                    scen_pos.save()
+
+                    ai = calc_accrued_interest(position_date, sec.maturity, sec.fixed_coupon, sec.frequency)
+                    dirty_price = pos.book_price + ai
+                    ytm = calc_ytm_of_bond(dirty_price, sec.fixed_coupon, position_date, sec.maturity, freq=sec.frequency)
+                    pv = calc_pv_of_vanilla_bond(position_date, sec.maturity, sec.fixed_coupon, curve, freq=sec.frequency)
+
+                    risk_scenario = RiskScenario.objects.create(
+                        security=sec,
+                        scenario=scenario,
+                        price=pos.book_price,
+                        yield_to_maturity=ytm,
+                        discounted_pv=pv,
+                        oas=0.0,
+                        accrued_interest=ai
+                    )
+
+                    scen_pos.risk_scenario = risk_scenario
+                    scen_pos.discounted_value = pv * pos.quantity / 100
+                    scen_pos.save()
+
+            return Response({"status": "ScenarioPositions successfully created."}, status=201)
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
