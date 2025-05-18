@@ -3,7 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pandas as pd
+import datetime
 from fi_utils.bond_valuation import calc_ytm_of_bond, calc_accrued_interest, calc_pv_of_vanilla_bond
+from django.db.models import Sum
+from datetime import timedelta
+import pdb
 
 from .models import (
     VanillaBondSecMaster,
@@ -589,3 +593,52 @@ class GenerateScenarioPositions(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+
+class PortfolioStressTrendView(APIView):
+    parser_classes = [JSONParser]
+    def post(self, request):
+        portfolio = request.data.get("portfolio")
+        position_date = request.data.get("position_date")
+        scenario_name = request.data.get("scenario_name")
+        # pdb.set_trace()
+
+
+        if not (portfolio and position_date and scenario_name):
+            return Response(
+                {"error": "portfolio, position_date, and scenario_name are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            base_date = datetime.datetime.strptime(position_date, "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"error": "Invalid position_date format. Use YYYY-MM-DD."}, status=400)
+
+        try:
+            scenario_desc = StressScenarioDescription.objects.get(name=scenario_name)
+        except StressScenarioDescription.DoesNotExist:
+            return Response({"error": f"Scenario '{scenario_name}' not found."}, status=404)
+
+        scenarios = StressScenario.objects.filter(scenario=scenario_desc).order_by("period_number", "simulation_number")
+
+        results = []
+        for scenario in scenarios:
+            total_mv = ScenarioPosition.objects.filter(
+                scenario=scenario,
+                portfolio_name=portfolio,
+                position_date=base_date,
+            ).aggregate(total=Sum("discounted_value"))["total"] or 0
+
+            date_shift = timedelta(days=round(scenario.period_length * 365))
+            asof_date = base_date + date_shift
+
+            results.append({
+                "date": asof_date.isoformat(),
+                "market_value": total_mv,
+                "period_number": scenario.period_number,
+                "simulation_number": scenario.simulation_number,
+            })
+
+        return Response(results, status=200)

@@ -16,7 +16,8 @@ from .views import (VanillaBondSecMasterViewSet,
                     PositionUploadCSV,
 GenerateScenarioPositions,
                     CurveUploadCSV,
-                    StressScenarioUploadCSV, CurvePointShockViewSet
+                    StressScenarioUploadCSV, CurvePointShockViewSet,
+PortfolioStressTrendView
                     )
 from .views import StressScenarioDescriptionViewSet
 
@@ -48,5 +49,6 @@ urlpatterns = [
     path('upload-curve/', CurveUploadCSV.as_view(), name='upload-curve'),
     path("curve-points/by-date/<str:curve_name>/<str:adate>/", FilteredCurveView.as_view(), name="filtered-curve"),
     path("upload-stress-scenarios/", StressScenarioUploadCSV.as_view(), name="upload-stress-scenarios"),
+    path("portfolio-stress-trend/", PortfolioStressTrendView.as_view(),name="portfolio-stress-trend")
 
 ]
