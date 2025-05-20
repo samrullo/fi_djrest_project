@@ -547,8 +547,6 @@ class GenerateScenarioPositions(APIView):
                     shocked_rate = cp.rate + shock.shock_size
                     curve[float(cp.year)] = shocked_rate
 
-                scenario_positions = []
-                risk_scenarios = []
                 for pos in positions:
                     sec = pos.security
 

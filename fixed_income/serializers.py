@@ -202,6 +202,7 @@ class ScenarioPositionSerializer(serializers.ModelSerializer):
             "risk_scenario", "risk_scenario_id",
             "portfolio_name",
             "position_date",
+            "period_end_date",
             "lot_id",
             "quantity",
             "notional_amount",

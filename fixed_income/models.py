@@ -174,6 +174,7 @@ class ScenarioPosition(models.Model):
     portfolio_name = models.CharField(max_length=100)
     scenario = models.ForeignKey(StressScenario, on_delete=models.CASCADE)
     position_date = models.DateField()
+    period_end_date = models.DateField()
     lot_id = models.IntegerField()
     security = models.ForeignKey(
         VanillaBondSecMaster,
