@@ -2,5 +2,7 @@ pandas
 django
 djangorestframework
 django-cors-headers
+ipython
+python-dateutil
 fi_utils_project
 sampytools

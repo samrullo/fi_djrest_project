@@ -4,6 +4,10 @@ asgiref==3.8.1
     # via
     #   django
     #   django-cors-headers
+asttokens==3.0.0
+    # via stack-data
+decorator==5.2.1
+    # via ipython
 django==5.2.1
     # via
     #   -r requirements.in
@@ -13,10 +17,20 @@ django-cors-headers==4.7.0
     # via -r requirements.in
 djangorestframework==3.16.0
     # via -r requirements.in
+executing==2.2.0
+    # via stack-data
 fi-utils-project==0.1.0
     # via -r requirements.in
+ipython==9.2.0
+    # via -r requirements.in
+ipython-pygments-lexers==1.1.1
+    # via ipython
+jedi==0.19.2
+    # via ipython
 joblib==1.5.0
     # via scikit-learn
+matplotlib-inline==0.1.7
+    # via ipython
 numpy==2.2.6
     # via
     #   pandas
@@ -26,8 +40,24 @@ pandas==2.2.3
     # via
     #   -r requirements.in
     #   sampytools
+parso==0.8.4
+    # via jedi
+pexpect==4.9.0
+    # via ipython
+prompt-toolkit==3.0.51
+    # via ipython
+ptyprocess==0.7.0
+    # via pexpect
+pure-eval==0.2.3
+    # via stack-data
+pygments==2.19.1
+    # via
+    #   ipython
+    #   ipython-pygments-lexers
 python-dateutil==2.9.0.post0
-    # via pandas
+    # via
+    #   -r requirements.in
+    #   pandas
 pytz==2025.2
     # via pandas
 sampytools==1.0.0
@@ -40,7 +70,15 @@ six==1.17.0
     # via python-dateutil
 sqlparse==0.5.3
     # via django
+stack-data==0.6.3
+    # via ipython
 threadpoolctl==3.6.0
     # via scikit-learn
+traitlets==5.14.3
+    # via
+    #   ipython
+    #   matplotlib-inline
 tzdata==2025.2
     # via pandas
+wcwidth==0.2.13
+    # via prompt-toolkit

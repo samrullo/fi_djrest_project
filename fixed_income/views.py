@@ -7,6 +7,8 @@ import datetime
 from fi_utils.bond_valuation import calc_ytm_of_bond, calc_accrued_interest, calc_pv_of_vanilla_bond
 from django.db.models import Sum
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
+from fi_utils.abor_utils import compute_linear_amortization_schedule
 import pdb
 
 from .models import (
@@ -69,6 +71,12 @@ class UploadVanillaBondsCSV(APIView):
             else:
                 df["frequency"] = df["frequency"].fillna(2)
 
+            # if no currency set it to USD
+            if "currency" not in df.columns:
+                df["currency"] = "USD"
+            else:
+                df["currency"] = df["currency"].fillna("USD")
+
             df["maturity"] = pd.to_datetime(df["maturity"]).dt.date
 
             bonds = [
@@ -78,6 +86,7 @@ class UploadVanillaBondsCSV(APIView):
                     fixed_coupon=float(row["fixed_coupon"]),
                     frequency=int(row["frequency"]),
                     maturity=row["maturity"],
+                    currency=row["currency"]
                 )
                 for _, row in df.iterrows()
             ]
@@ -305,7 +314,8 @@ class PositionUploadCSV(APIView):
                 ai = calc_accrued_interest(position_date, security.maturity, security.fixed_coupon)
                 dirty_price = book_price + ai
                 ytm = calc_ytm_of_bond(dirty_price, security.fixed_coupon, position_date, security.maturity)
-                pv = calc_pv_of_vanilla_bond(position_date, security.maturity, security.fixed_coupon, curve_dict, freq=security.frequency)
+                pv = calc_pv_of_vanilla_bond(position_date, security.maturity, security.fixed_coupon, curve_dict,
+                                             freq=security.frequency)
 
                 risk_core = RiskCore.objects.create(
                     security=security,
@@ -341,6 +351,7 @@ class PositionUploadCSV(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
 
 class CurveUploadCSV(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -533,8 +544,15 @@ class GenerateScenarioPositions(APIView):
 
             scenarios = StressScenario.objects.filter(scenario=scenario_description)
             if not scenarios.exists():
-                return Response({"error": f"No StressScenario entries found for scenario '{scenario_name}'."}, status=404)
+                return Response({"error": f"No StressScenario entries found for scenario '{scenario_name}'."},
+                                status=404)
 
+            security_amortization_schedules={}
+            for pos in positions:
+                sec=pos.security
+                total_periods,change_per_period=compute_linear_amortization_schedule(pos.book_price,sec.maturity,position_date,period_length_years=1.0)
+                security_amortization_schedules[sec]={"total_periods":total_periods,"change_per_period":change_per_period}
+            pdb.set_trace()
             for scenario in scenarios:
                 shocks = CurvePointShock.objects.filter(stress_scenario=scenario)
                 if not shocks.exists():
@@ -547,45 +565,53 @@ class GenerateScenarioPositions(APIView):
                     shocked_rate = cp.rate + shock.shock_size
                     curve[float(cp.year)] = shocked_rate
 
+                period_end_date = position_date + relativedelta(
+                    years=(scenario.period_number + 1) * scenario.period_length)
                 for pos in positions:
                     sec = pos.security
+                    pdb.set_trace()
+                    if sec.maturity>=period_end_date:
+                        book_price = pos.book_price + (scenario.period_number + 1) * security_amortization_schedules[sec][
+                            "change_per_period"]
+                        notional_amount = book_price * pos.quantity / 100
+                        book_value = notional_amount
+                        par_value = pos.quantity
 
-                    notional_amount = pos.book_price * pos.quantity / 100
-                    book_value = notional_amount
-                    par_value = pos.quantity
+                        scen_pos = ScenarioPosition(
+                            portfolio_name=pos.portfolio_name,
+                            scenario=scenario,
+                            position_date=position_date,
+                            period_end_date=period_end_date,
+                            lot_id=pos.lot_id,
+                            security=sec,
+                            quantity=pos.quantity,
+                            notional_amount=notional_amount,
+                            par_value=par_value,
+                            book_price=book_price,
+                            book_value=book_value
+                        )
+                        scen_pos.save()
 
-                    scen_pos = ScenarioPosition(
-                        portfolio_name=pos.portfolio_name,
-                        scenario=scenario,
-                        position_date=position_date,
-                        lot_id=pos.lot_id,
-                        security=sec,
-                        quantity=pos.quantity,
-                        notional_amount=notional_amount,
-                        par_value=par_value,
-                        book_price=pos.book_price,
-                        book_value=book_value
-                    )
-                    scen_pos.save()
+                        ai = calc_accrued_interest(period_end_date, sec.maturity, sec.fixed_coupon, sec.frequency)
+                        dirty_price = pos.book_price + ai
+                        ytm = calc_ytm_of_bond(dirty_price, sec.fixed_coupon, period_end_date, sec.maturity,
+                                               freq=sec.frequency)
+                        pv = calc_pv_of_vanilla_bond(period_end_date, sec.maturity, sec.fixed_coupon, curve,
+                                                     freq=sec.frequency)
 
-                    ai = calc_accrued_interest(position_date, sec.maturity, sec.fixed_coupon, sec.frequency)
-                    dirty_price = pos.book_price + ai
-                    ytm = calc_ytm_of_bond(dirty_price, sec.fixed_coupon, position_date, sec.maturity, freq=sec.frequency)
-                    pv = calc_pv_of_vanilla_bond(position_date, sec.maturity, sec.fixed_coupon, curve, freq=sec.frequency)
+                        risk_scenario = RiskScenario.objects.create(
+                            security=sec,
+                            scenario=scenario,
+                            price=pos.book_price,
+                            yield_to_maturity=ytm,
+                            discounted_pv=pv,
+                            oas=0.0,
+                            accrued_interest=ai
+                        )
 
-                    risk_scenario = RiskScenario.objects.create(
-                        security=sec,
-                        scenario=scenario,
-                        price=pos.book_price,
-                        yield_to_maturity=ytm,
-                        discounted_pv=pv,
-                        oas=0.0,
-                        accrued_interest=ai
-                    )
-
-                    scen_pos.risk_scenario = risk_scenario
-                    scen_pos.discounted_value = pv * pos.quantity / 100
-                    scen_pos.save()
+                        scen_pos.risk_scenario = risk_scenario
+                        scen_pos.discounted_value = pv * pos.quantity / 100
+                        scen_pos.save()
 
             return Response({"status": "ScenarioPositions successfully created."}, status=201)
 
@@ -593,15 +619,14 @@ class GenerateScenarioPositions(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-
 class PortfolioStressTrendView(APIView):
     parser_classes = [JSONParser]
+
     def post(self, request):
         portfolio = request.data.get("portfolio")
         position_date = request.data.get("position_date")
         scenario_name = request.data.get("scenario_name")
         # pdb.set_trace()
-
 
         if not (portfolio and position_date and scenario_name):
             return Response(
