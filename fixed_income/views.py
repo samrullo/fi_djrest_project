@@ -552,7 +552,7 @@ class GenerateScenarioPositions(APIView):
                 sec=pos.security
                 total_periods,change_per_period=compute_linear_amortization_schedule(pos.book_price,sec.maturity,position_date,period_length_years=1.0)
                 security_amortization_schedules[sec]={"total_periods":total_periods,"change_per_period":change_per_period}
-            pdb.set_trace()
+            # pdb.set_trace()
             for scenario in scenarios:
                 shocks = CurvePointShock.objects.filter(stress_scenario=scenario)
                 if not shocks.exists():
