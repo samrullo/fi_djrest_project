@@ -19,7 +19,7 @@ class SecurityIdentifier(models.Model):
     security = models.ForeignKey(
         VanillaBondSecMaster,
         on_delete=models.CASCADE,
-        related_name="security_identifier_data"
+        related_name="security_identifier_data",
     )
     identifier_type = models.CharField(max_length=50)
     identifier_value = models.CharField(max_length=100)
@@ -35,9 +35,7 @@ class CurveDescription(models.Model):
 
 class CurvePoint(models.Model):
     curve_description = models.ForeignKey(
-        CurveDescription,
-        on_delete=models.CASCADE,
-        related_name="points"
+        CurveDescription, on_delete=models.CASCADE, related_name="points"
     )
     adate = models.DateField(help_text="As-of date for this curve snapshot")
     year = models.IntegerField(help_text="Tenor in years (1–30)")
@@ -61,9 +59,7 @@ class StressScenarioDescription(models.Model):
 
 class StressScenario(models.Model):
     scenario = models.ForeignKey(
-        StressScenarioDescription,
-        on_delete=models.CASCADE,
-        related_name="scenarios"
+        StressScenarioDescription, on_delete=models.CASCADE, related_name="scenarios"
     )
     period_number = models.IntegerField()
     simulation_number = models.IntegerField()
@@ -78,14 +74,12 @@ class StressScenario(models.Model):
 
 class CurvePointShock(models.Model):
     stress_scenario = models.ForeignKey(
-        StressScenario,
-        on_delete=models.CASCADE,
-        related_name="curve_point_shocks"
+        StressScenario, on_delete=models.CASCADE, related_name="curve_point_shocks"
     )
     curve_point = models.ForeignKey(
         CurvePoint,
         on_delete=models.CASCADE,
-        help_text="Reference to curve point (curve_name, adate, year, rate)"
+        help_text="Reference to curve point (curve_name, adate, year, rate)",
     )
     shock_size = models.FloatField(help_text="Shock size in percentages")
 
@@ -93,19 +87,17 @@ class CurvePointShock(models.Model):
         unique_together = ("stress_scenario", "curve_point")
 
     def __str__(self):
-        return f"Shock {self.shock_size}% on {self.curve_point} in {self.stress_scenario}"
+        return (
+            f"Shock {self.shock_size}% on {self.curve_point} in {self.stress_scenario}"
+        )
 
 
 class RiskCore(models.Model):
     security = models.ForeignKey(
-        VanillaBondSecMaster,
-        on_delete=models.CASCADE,
-        related_name="risk_core_data"
+        VanillaBondSecMaster, on_delete=models.CASCADE, related_name="risk_core_data"
     )
     curve_description = models.ForeignKey(
-        CurveDescription,
-        on_delete=models.CASCADE,
-        related_name="risk_core_entries"
+        CurveDescription, on_delete=models.CASCADE, related_name="risk_core_entries"
     )
     risk_date = models.DateField(help_text="As-of date for risk metrics")
     price = models.FloatField()
@@ -122,12 +114,10 @@ class RiskScenario(models.Model):
     security = models.ForeignKey(
         VanillaBondSecMaster,
         on_delete=models.CASCADE,
-        related_name="scenario_risk_data"
+        related_name="scenario_risk_data",
     )
     scenario = models.ForeignKey(
-        StressScenario,
-        on_delete=models.CASCADE,
-        related_name="risk_analytics"
+        StressScenario, on_delete=models.CASCADE, related_name="risk_analytics"
     )
     price = models.FloatField()
     yield_to_maturity = models.FloatField()
@@ -147,9 +137,7 @@ class Position(models.Model):
     position_date = models.DateField()
     lot_id = models.IntegerField()
     security = models.ForeignKey(
-        VanillaBondSecMaster,
-        on_delete=models.CASCADE,
-        related_name="positions"
+        VanillaBondSecMaster, on_delete=models.CASCADE, related_name="positions"
     )
     risk_core = models.ForeignKey(
         "RiskCore",
@@ -157,7 +145,7 @@ class Position(models.Model):
         null=True,
         blank=True,
         related_name="positions",
-        help_text="Linked RiskCore based on position_date and security"
+        help_text="Linked RiskCore based on position_date and security",
     )
     quantity = models.FloatField()
     notional_amount = models.FloatField()
@@ -179,7 +167,7 @@ class ScenarioPosition(models.Model):
     security = models.ForeignKey(
         VanillaBondSecMaster,
         on_delete=models.CASCADE,
-        related_name="scenario_positions"
+        related_name="scenario_positions",
     )
     quantity = models.FloatField()
     notional_amount = models.FloatField()
@@ -188,11 +176,11 @@ class ScenarioPosition(models.Model):
     book_value = models.FloatField()
     discounted_value = models.FloatField(blank=True, null=True)
     risk_scenario = models.ForeignKey(
-        'RiskScenario',
+        "RiskScenario",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Linked RiskScenario based on scenario and security."
+        help_text="Linked RiskScenario based on scenario and security.",
     )
 
     def __str__(self):
@@ -208,9 +196,7 @@ class Transaction(models.Model):
     ]
     portfolio_name = models.CharField(max_length=100)
     security = models.ForeignKey(
-        VanillaBondSecMaster,
-        on_delete=models.CASCADE,
-        related_name="transactions"
+        VanillaBondSecMaster, on_delete=models.CASCADE, related_name="transactions"
     )
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPES)
     transaction_date = models.DateField()
@@ -229,9 +215,7 @@ class Transaction(models.Model):
 class AborPnL(models.Model):
     portfolio_name = models.CharField(max_length=100)
     security = models.ForeignKey(
-        VanillaBondSecMaster,
-        on_delete=models.CASCADE,
-        related_name="abor_pnls"
+        VanillaBondSecMaster, on_delete=models.CASCADE, related_name="abor_pnls"
     )
     scenario = models.ForeignKey(StressScenario, on_delete=models.CASCADE)
     period_date = models.DateField()

@@ -4,7 +4,7 @@ from .models import (
     SecurityIdentifier,
     CurveDescription,
     CurvePoint,
-CurvePointShock,
+    CurvePointShock,
     StressScenario,
     Position,
     ScenarioPosition,
@@ -14,6 +14,7 @@ CurvePointShock,
     RiskCore,
     RiskScenario,
 )
+
 
 class VanillaBondSecMasterSerializer(serializers.ModelSerializer):
     class Meta:
@@ -35,11 +36,21 @@ class CurveDescriptionSerializer(serializers.ModelSerializer):
 
 class CurvePointSerializer(serializers.ModelSerializer):
     curve_name = serializers.CharField(source="curve_description.name", read_only=True)
-    curve_desc = serializers.CharField(source="curve_description.description", read_only=True)
+    curve_desc = serializers.CharField(
+        source="curve_description.description", read_only=True
+    )
 
     class Meta:
         model = CurvePoint
-        fields = ["id", "curve_description", "curve_name", "curve_desc", "adate", "year", "rate"]
+        fields = [
+            "id",
+            "curve_description",
+            "curve_name",
+            "curve_desc",
+            "adate",
+            "year",
+            "rate",
+        ]
 
 
 class CurveNestedSerializer(serializers.ModelSerializer):
@@ -53,7 +64,8 @@ class CurveNestedSerializer(serializers.ModelSerializer):
 class StressScenarioDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = StressScenarioDescription
-        fields = ['id', 'name', 'description']
+        fields = ["id", "name", "description"]
+
 
 class CurvePointShockSerializer(serializers.ModelSerializer):
     curve_point_details = serializers.SerializerMethodField()
@@ -85,8 +97,12 @@ class CurvePointShockSerializer(serializers.ModelSerializer):
             "period_number": scenario.period_number,
             "simulation_number": scenario.simulation_number,
         }
+
+
 class StressScenarioSerializer(serializers.ModelSerializer):
-    scenario_details = StressScenarioDescriptionSerializer(source="scenario", read_only=True)
+    scenario_details = StressScenarioDescriptionSerializer(
+        source="scenario", read_only=True
+    )
     curve_point_shocks = CurvePointShockSerializer(many=True, read_only=True)
 
     class Meta:
@@ -98,7 +114,7 @@ class StressScenarioSerializer(serializers.ModelSerializer):
             "period_number",
             "simulation_number",
             "period_length",
-            "curve_point_shocks"
+            "curve_point_shocks",
         ]
 
 
@@ -126,28 +142,51 @@ class AborPnLSerializer(serializers.ModelSerializer):
 
 class RiskCoreSerializer(serializers.ModelSerializer):
     security_name = serializers.CharField(source="security.asset_name", read_only=True)
-    identifier_client = serializers.CharField(source="security.identifier_client", read_only=True)
+    identifier_client = serializers.CharField(
+        source="security.identifier_client", read_only=True
+    )
     curve_name = serializers.CharField(source="curve_description.name", read_only=True)
 
     class Meta:
         model = RiskCore
         fields = [
-            "id", "security", "security_name", "identifier_client", "risk_date",
-            "price","accrued_interest", "yield_to_maturity", "oas", "discounted_pv","curve_description","curve_name"
+            "id",
+            "security",
+            "security_name",
+            "identifier_client",
+            "risk_date",
+            "price",
+            "accrued_interest",
+            "yield_to_maturity",
+            "oas",
+            "discounted_pv",
+            "curve_description",
+            "curve_name",
         ]
 
 
 class RiskScenarioSerializer(serializers.ModelSerializer):
     security_name = serializers.CharField(source="security.asset_name", read_only=True)
-    identifier_client = serializers.CharField(source="security.identifier_client", read_only=True)
+    identifier_client = serializers.CharField(
+        source="security.identifier_client", read_only=True
+    )
     scenario_details = StressScenarioSerializer(source="scenario", read_only=True)
 
     class Meta:
         model = RiskScenario
         fields = [
-            "id", "security", "security_name", "identifier_client", "scenario", "scenario_details",
-            "price", "yield_to_maturity", "oas", "discounted_pv"
+            "id",
+            "security",
+            "security_name",
+            "identifier_client",
+            "scenario",
+            "scenario_details",
+            "price",
+            "yield_to_maturity",
+            "oas",
+            "discounted_pv",
         ]
+
 
 class PositionSerializer(serializers.ModelSerializer):
     security = VanillaBondSecMasterSerializer(read_only=True)
@@ -157,15 +196,21 @@ class PositionSerializer(serializers.ModelSerializer):
 
     risk_core = RiskCoreSerializer(read_only=True)
     risk_core_id = serializers.PrimaryKeyRelatedField(
-        queryset=RiskCore.objects.all(), source="risk_core", write_only=True, required=False, allow_null=True
+        queryset=RiskCore.objects.all(),
+        source="risk_core",
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
 
     class Meta:
         model = Position
         fields = [
             "id",
-            "security", "security_id",
-            "risk_core", "risk_core_id",
+            "security",
+            "security_id",
+            "risk_core",
+            "risk_core_id",
             "portfolio_name",
             "position_date",
             "lot_id",
@@ -176,6 +221,7 @@ class PositionSerializer(serializers.ModelSerializer):
             "book_value",
             "discounted_value",
         ]
+
 
 class ScenarioPositionSerializer(serializers.ModelSerializer):
     scenario = StressScenarioSerializer(read_only=True)
@@ -190,16 +236,23 @@ class ScenarioPositionSerializer(serializers.ModelSerializer):
 
     risk_scenario = RiskScenarioSerializer(read_only=True)
     risk_scenario_id = serializers.PrimaryKeyRelatedField(
-        queryset=RiskScenario.objects.all(), source="risk_scenario", write_only=True, required=False, allow_null=True
+        queryset=RiskScenario.objects.all(),
+        source="risk_scenario",
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
 
     class Meta:
         model = ScenarioPosition
         fields = [
             "id",
-            "scenario", "scenario_id",
-            "security", "security_id",
-            "risk_scenario", "risk_scenario_id",
+            "scenario",
+            "scenario_id",
+            "security",
+            "security_id",
+            "risk_scenario",
+            "risk_scenario_id",
             "portfolio_name",
             "position_date",
             "period_end_date",

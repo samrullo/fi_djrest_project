@@ -4,12 +4,16 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pandas as pd
 import datetime
-from fi_utils.bond_valuation import calc_ytm_of_bond, calc_accrued_interest, calc_pv_of_vanilla_bond
+from fi_utils.bond_valuation import (
+    calc_ytm_of_bond,
+    calc_accrued_interest,
+    calc_pv_of_vanilla_bond,
+)
 from django.db.models import Sum
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from fi_utils.abor_utils import compute_linear_amortization_schedule
-import pdb
+import logging
 
 from .models import (
     VanillaBondSecMaster,
@@ -55,15 +59,25 @@ class UploadVanillaBondsCSV(APIView):
     def post(self, request, format=None):
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             df = pd.read_csv(file_obj)
 
-            required_columns = ["identifier_client", "asset_name", "fixed_coupon", "maturity"]
+            required_columns = [
+                "identifier_client",
+                "asset_name",
+                "fixed_coupon",
+                "maturity",
+            ]
             missing = [col for col in required_columns if col not in df.columns]
             if missing:
-                return Response({"error": f"Missing columns: {missing}"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": f"Missing columns: {missing}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             # Optional column
             if "frequency" not in df.columns:
@@ -86,7 +100,7 @@ class UploadVanillaBondsCSV(APIView):
                     fixed_coupon=float(row["fixed_coupon"]),
                     frequency=int(row["frequency"]),
                     maturity=row["maturity"],
-                    currency=row["currency"]
+                    currency=row["currency"],
                 )
                 for _, row in df.iterrows()
             ]
@@ -95,11 +109,13 @@ class UploadVanillaBondsCSV(APIView):
 
             return Response(
                 {"status": "Upload successful", "records_created": len(bonds)},
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class SecurityIdentifierViewSet(viewsets.ModelViewSet):
@@ -135,15 +151,21 @@ class RiskCoreUploadCSV(APIView):
             try:
                 curve_desc = CurveDescription.objects.get(name=curve_name)
             except CurveDescription.DoesNotExist:
-                return Response({"error": f"CurveDescription '{curve_name}' not found."}, status=400)
+                return Response(
+                    {"error": f"CurveDescription '{curve_name}' not found."}, status=400
+                )
 
-            curve_points = CurvePoint.objects.filter(curve_description=curve_desc, adate=adate)
+            curve_points = CurvePoint.objects.filter(
+                curve_description=curve_desc, adate=adate
+            )
             curve = {float(p.year): p.rate for p in curve_points}
 
             records = []
             for _, row in df.iterrows():
                 try:
-                    bond = VanillaBondSecMaster.objects.get(identifier_client=row["identifier_client"])
+                    bond = VanillaBondSecMaster.objects.get(
+                        identifier_client=row["identifier_client"]
+                    )
                 except VanillaBondSecMaster.DoesNotExist:
                     continue  # skip unknown bonds
 
@@ -163,16 +185,16 @@ class RiskCoreUploadCSV(APIView):
                     yield_to_maturity=ytm,
                     oas=0.0,  # Placeholder unless provided
                     discounted_pv=pv,
-                    accrued_interest=ai
+                    accrued_interest=ai,
                 )
                 records.append(rc)
 
             RiskCore.objects.bulk_create(records)
 
-            return Response({
-                "status": "Upload successful",
-                "records_created": len(records)
-            }, status=201)
+            return Response(
+                {"status": "Upload successful", "records_created": len(records)},
+                status=201,
+            )
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -263,18 +285,26 @@ class PositionUploadCSV(APIView):
     def post(self, request, format=None):
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             df = pd.read_csv(file_obj)
 
             required_columns = [
-                "portfolio_name", "position_date", "identifier_client",
-                "quantity", "book_price", "curve_name"
+                "portfolio_name",
+                "position_date",
+                "identifier_client",
+                "quantity",
+                "book_price",
+                "curve_name",
             ]
             missing = [col for col in required_columns if col not in df.columns]
             if missing:
-                return Response({"error": f"Missing required columns: {missing}"}, status=400)
+                return Response(
+                    {"error": f"Missing required columns: {missing}"}, status=400
+                )
 
             df["position_date"] = pd.to_datetime(df["position_date"]).dt.date
             position_records = []
@@ -285,21 +315,34 @@ class PositionUploadCSV(APIView):
                 position_date = row["position_date"]
 
                 try:
-                    security = VanillaBondSecMaster.objects.get(identifier_client=identifier)
+                    security = VanillaBondSecMaster.objects.get(
+                        identifier_client=identifier
+                    )
                 except VanillaBondSecMaster.DoesNotExist:
-                    return Response({"error": f"Security with identifier '{identifier}' not found."}, status=400)
+                    return Response(
+                        {
+                            "error": f"Security with identifier '{identifier}' not found."
+                        },
+                        status=400,
+                    )
 
                 try:
                     curve_desc = CurveDescription.objects.get(name=curve_name)
                 except CurveDescription.DoesNotExist:
-                    return Response({"error": f"Curve '{curve_name}' not found."}, status=400)
+                    return Response(
+                        {"error": f"Curve '{curve_name}' not found."}, status=400
+                    )
 
                 curve_points_qs = CurvePoint.objects.filter(
-                    curve_description=curve_desc,
-                    adate=position_date
+                    curve_description=curve_desc, adate=position_date
                 )
                 if not curve_points_qs.exists():
-                    return Response({"error": f"No curve points for {curve_name} on {position_date}."}, status=400)
+                    return Response(
+                        {
+                            "error": f"No curve points for {curve_name} on {position_date}."
+                        },
+                        status=400,
+                    )
 
                 curve_points = list(curve_points_qs.order_by("year"))
                 curve_dict = {float(cp.year): cp.rate for cp in curve_points}
@@ -311,11 +354,20 @@ class PositionUploadCSV(APIView):
                 par_value = quantity
                 book_value = notional_amount
 
-                ai = calc_accrued_interest(position_date, security.maturity, security.fixed_coupon)
+                ai = calc_accrued_interest(
+                    position_date, security.maturity, security.fixed_coupon
+                )
                 dirty_price = book_price + ai
-                ytm = calc_ytm_of_bond(dirty_price, security.fixed_coupon, position_date, security.maturity)
-                pv = calc_pv_of_vanilla_bond(position_date, security.maturity, security.fixed_coupon, curve_dict,
-                                             freq=security.frequency)
+                ytm = calc_ytm_of_bond(
+                    dirty_price, security.fixed_coupon, position_date, security.maturity
+                )
+                pv = calc_pv_of_vanilla_bond(
+                    position_date,
+                    security.maturity,
+                    security.fixed_coupon,
+                    curve_dict,
+                    freq=security.frequency,
+                )
 
                 risk_core = RiskCore.objects.create(
                     security=security,
@@ -325,7 +377,7 @@ class PositionUploadCSV(APIView):
                     accrued_interest=ai,
                     yield_to_maturity=ytm,
                     discounted_pv=pv,
-                    oas=0.0
+                    oas=0.0,
                 )
 
                 discounted_value = quantity * pv / 100
@@ -341,13 +393,16 @@ class PositionUploadCSV(APIView):
                     book_price=book_price,
                     book_value=book_value,
                     discounted_value=discounted_value,
-                    risk_core=risk_core
+                    risk_core=risk_core,
                 )
 
                 position_records.append(position)
 
             Position.objects.bulk_create(position_records)
-            return Response({"status": "Upload successful", "rows": len(position_records)}, status=201)
+            return Response(
+                {"status": "Upload successful", "rows": len(position_records)},
+                status=201,
+            )
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -359,7 +414,9 @@ class CurveUploadCSV(APIView):
     def post(self, request, format=None):
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             df = pd.read_csv(file_obj)
@@ -373,7 +430,9 @@ class CurveUploadCSV(APIView):
             if "curve_description" not in df.columns:
                 df["curve_description"] = df["curve_name"]
             else:
-                df["curve_description"] = df["curve_description"].fillna(df["curve_name"])
+                df["curve_description"] = df["curve_description"].fillna(
+                    df["curve_name"]
+                )
 
             df["adate"] = pd.to_datetime(df["adate"]).dt.date
 
@@ -381,7 +440,9 @@ class CurveUploadCSV(APIView):
             curve_info = df[["curve_name", "curve_description"]].drop_duplicates()
             existing = {
                 c.name: c
-                for c in CurveDescription.objects.filter(name__in=curve_info["curve_name"].unique())
+                for c in CurveDescription.objects.filter(
+                    name__in=curve_info["curve_name"].unique()
+                )
             }
 
             new = [
@@ -392,7 +453,10 @@ class CurveUploadCSV(APIView):
             CurveDescription.objects.bulk_create(new)
 
             all_curves = {
-                c.name: c for c in CurveDescription.objects.filter(name__in=curve_info["curve_name"].unique())
+                c.name: c
+                for c in CurveDescription.objects.filter(
+                    name__in=curve_info["curve_name"].unique()
+                )
             }
 
             points = []
@@ -409,8 +473,12 @@ class CurveUploadCSV(APIView):
             CurvePoint.objects.bulk_create(points)
 
             return Response(
-                {"status": "Upload successful", "curves": len(all_curves), "points": len(points)},
-                status=201
+                {
+                    "status": "Upload successful",
+                    "curves": len(all_curves),
+                    "points": len(points),
+                },
+                status=201,
             )
 
         except Exception as e:
@@ -421,15 +489,16 @@ class FilteredCurveView(APIView):
     def get(self, request, curve_name, adate):
         try:
             points = CurvePoint.objects.filter(
-                curve_description__name=curve_name,
-                adate=adate
+                curve_description__name=curve_name, adate=adate
             ).order_by("year")
 
             serializer = CurvePointSerializer(points, many=True)
             return Response(serializer.data)
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 from rest_framework.views import APIView
@@ -452,19 +521,28 @@ class StressScenarioUploadCSV(APIView):
     def post(self, request, format=None):
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             df = pd.read_csv(file_obj)
 
             required_columns = [
-                "scenario_name", "period_number", "simulation_number",
-                "curve_name", "curve_adate", "curve_year",
-                "period_length", "parallel_shock_size"
+                "scenario_name",
+                "period_number",
+                "simulation_number",
+                "curve_name",
+                "curve_adate",
+                "curve_year",
+                "period_length",
+                "parallel_shock_size",
             ]
             missing = [col for col in required_columns if col not in df.columns]
             if missing:
-                return Response({"error": f"Missing required columns: {missing}"}, status=400)
+                return Response(
+                    {"error": f"Missing required columns: {missing}"}, status=400
+                )
 
             df["curve_adate"] = pd.to_datetime(df["curve_adate"]).dt.date
 
@@ -485,7 +563,7 @@ class StressScenarioUploadCSV(APIView):
                         scenario=scenario_desc,
                         period_number=row["period_number"],
                         simulation_number=row["simulation_number"],
-                        defaults={"period_length": row["period_length"]}
+                        defaults={"period_length": row["period_length"]},
                     )
                     scenario_cache[key] = stress_scenario
                 else:
@@ -497,24 +575,29 @@ class StressScenarioUploadCSV(APIView):
                     curve_point = CurvePoint.objects.get(
                         curve_description=curve_desc,
                         adate=row["curve_adate"],
-                        year=int(row["curve_year"])
+                        year=int(row["curve_year"]),
                     )
                 except CurvePoint.DoesNotExist:
-                    return Response({
-                        "error": f"CurvePoint not found: {row['curve_name']} - {row['curve_adate']} - Year {row['curve_year']}"
-                    }, status=400)
+                    return Response(
+                        {
+                            "error": f"CurvePoint not found: {row['curve_name']} - {row['curve_adate']} - Year {row['curve_year']}"
+                        },
+                        status=400,
+                    )
 
                 # Create CurvePointShock (no bulk_create because we might want unique_together constraints to raise)
                 shock = CurvePointShock(
                     stress_scenario=stress_scenario,
                     curve_point=curve_point,
-                    shock_size=row["parallel_shock_size"]
+                    shock_size=row["parallel_shock_size"],
                 )
                 shock_records.append(shock)
 
             CurvePointShock.objects.bulk_create(shock_records, ignore_conflicts=True)
 
-            return Response({"status": "Upload successful", "rows": len(shock_records)}, status=201)
+            return Response(
+                {"status": "Upload successful", "rows": len(shock_records)}, status=201
+            )
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -530,29 +613,53 @@ class GenerateScenarioPositions(APIView):
             scenario_name = request.data.get("scenario_name")
 
             if not (portfolio_name and position_date and scenario_name):
-                return Response({"error": "portfolio_name, position_date, and scenario_name are required."}, status=400)
+                return Response(
+                    {
+                        "error": "portfolio_name, position_date, and scenario_name are required."
+                    },
+                    status=400,
+                )
 
             position_date = pd.to_datetime(position_date).date()
-            positions = Position.objects.filter(portfolio_name=portfolio_name, position_date=position_date)
+            positions = Position.objects.filter(
+                portfolio_name=portfolio_name, position_date=position_date
+            )
             if not positions.exists():
-                return Response({"error": "No positions found for given portfolio and date."}, status=404)
+                return Response(
+                    {"error": "No positions found for given portfolio and date."},
+                    status=404,
+                )
 
             try:
-                scenario_description = StressScenarioDescription.objects.get(name=scenario_name)
+                scenario_description = StressScenarioDescription.objects.get(
+                    name=scenario_name
+                )
             except StressScenarioDescription.DoesNotExist:
-                return Response({"error": f"ScenarioDescription '{scenario_name}' not found."}, status=404)
+                return Response(
+                    {"error": f"ScenarioDescription '{scenario_name}' not found."},
+                    status=404,
+                )
 
             scenarios = StressScenario.objects.filter(scenario=scenario_description)
             if not scenarios.exists():
-                return Response({"error": f"No StressScenario entries found for scenario '{scenario_name}'."},
-                                status=404)
+                return Response(
+                    {
+                        "error": f"No StressScenario entries found for scenario '{scenario_name}'."
+                    },
+                    status=404,
+                )
 
-            security_amortization_schedules={}
+            security_amortization_schedules = {}
             for pos in positions:
-                sec=pos.security
-                total_periods,change_per_period=compute_linear_amortization_schedule(pos.book_price,sec.maturity,position_date,period_length_years=1.0)
-                security_amortization_schedules[sec]={"total_periods":total_periods,"change_per_period":change_per_period}
-            # pdb.set_trace()
+                sec = pos.security
+                total_periods, change_per_period = compute_linear_amortization_schedule(
+                    pos.book_price, sec.maturity, position_date, period_length_years=1.0
+                )
+                security_amortization_schedules[sec] = {
+                    "total_periods": total_periods,
+                    "change_per_period": change_per_period,
+                }
+
             for scenario in scenarios:
                 shocks = CurvePointShock.objects.filter(stress_scenario=scenario)
                 if not shocks.exists():
@@ -566,13 +673,17 @@ class GenerateScenarioPositions(APIView):
                     curve[float(cp.year)] = shocked_rate
 
                 period_end_date = position_date + relativedelta(
-                    years=(scenario.period_number + 1) * scenario.period_length)
+                    years=(scenario.period_number + 1) * scenario.period_length
+                )
                 for pos in positions:
                     sec = pos.security
-                    pdb.set_trace()
-                    if sec.maturity>=period_end_date:
-                        book_price = pos.book_price + (scenario.period_number + 1) * security_amortization_schedules[sec][
-                            "change_per_period"]
+
+                    if sec.maturity >= period_end_date:
+                        book_price = (
+                            pos.book_price
+                            + (scenario.period_number + 1)
+                            * security_amortization_schedules[sec]["change_per_period"]
+                        )
                         notional_amount = book_price * pos.quantity / 100
                         book_value = notional_amount
                         par_value = pos.quantity
@@ -588,16 +699,35 @@ class GenerateScenarioPositions(APIView):
                             notional_amount=notional_amount,
                             par_value=par_value,
                             book_price=book_price,
-                            book_value=book_value
+                            book_value=book_value,
                         )
                         scen_pos.save()
 
-                        ai = calc_accrued_interest(period_end_date, sec.maturity, sec.fixed_coupon, sec.frequency)
+                        ai = calc_accrued_interest(
+                            period_end_date,
+                            sec.maturity,
+                            sec.fixed_coupon,
+                            sec.frequency,
+                        )
                         dirty_price = pos.book_price + ai
-                        ytm = calc_ytm_of_bond(dirty_price, sec.fixed_coupon, period_end_date, sec.maturity,
-                                               freq=sec.frequency)
-                        pv = calc_pv_of_vanilla_bond(period_end_date, sec.maturity, sec.fixed_coupon, curve,
-                                                     freq=sec.frequency)
+                        try:
+                            ytm = calc_ytm_of_bond(
+                                dirty_price,
+                                sec.fixed_coupon,
+                                period_end_date,
+                                sec.maturity,
+                                freq=sec.frequency,
+                            )
+                        except ValueError as e:
+                            logging.info(f"Got Value error : {e}")
+                            ytm=1e-7
+                        pv = calc_pv_of_vanilla_bond(
+                            period_end_date,
+                            sec.maturity,
+                            sec.fixed_coupon,
+                            curve,
+                            freq=sec.frequency,
+                        )
 
                         risk_scenario = RiskScenario.objects.create(
                             security=sec,
@@ -606,14 +736,16 @@ class GenerateScenarioPositions(APIView):
                             yield_to_maturity=ytm,
                             discounted_pv=pv,
                             oas=0.0,
-                            accrued_interest=ai
+                            accrued_interest=ai,
                         )
 
                         scen_pos.risk_scenario = risk_scenario
                         scen_pos.discounted_value = pv * pos.quantity / 100
                         scen_pos.save()
 
-            return Response({"status": "ScenarioPositions successfully created."}, status=201)
+            return Response(
+                {"status": "ScenarioPositions successfully created."}, status=201
+            )
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -626,7 +758,6 @@ class PortfolioStressTrendView(APIView):
         portfolio = request.data.get("portfolio")
         position_date = request.data.get("position_date")
         scenario_name = request.data.get("scenario_name")
-        # pdb.set_trace()
 
         if not (portfolio and position_date and scenario_name):
             return Response(
@@ -637,31 +768,42 @@ class PortfolioStressTrendView(APIView):
         try:
             base_date = datetime.datetime.strptime(position_date, "%Y-%m-%d").date()
         except ValueError:
-            return Response({"error": "Invalid position_date format. Use YYYY-MM-DD."}, status=400)
+            return Response(
+                {"error": "Invalid position_date format. Use YYYY-MM-DD."}, status=400
+            )
 
         try:
             scenario_desc = StressScenarioDescription.objects.get(name=scenario_name)
         except StressScenarioDescription.DoesNotExist:
-            return Response({"error": f"Scenario '{scenario_name}' not found."}, status=404)
+            return Response(
+                {"error": f"Scenario '{scenario_name}' not found."}, status=404
+            )
 
-        scenarios = StressScenario.objects.filter(scenario=scenario_desc).order_by("period_number", "simulation_number")
+        scenarios = StressScenario.objects.filter(scenario=scenario_desc).order_by(
+            "period_number", "simulation_number"
+        )
 
         results = []
         for scenario in scenarios:
-            total_mv = ScenarioPosition.objects.filter(
-                scenario=scenario,
-                portfolio_name=portfolio,
-                position_date=base_date,
-            ).aggregate(total=Sum("discounted_value"))["total"] or 0
+            total_mv = (
+                ScenarioPosition.objects.filter(
+                    scenario=scenario,
+                    portfolio_name=portfolio,
+                    position_date=base_date,
+                ).aggregate(total=Sum("discounted_value"))["total"]
+                or 0
+            )
 
             date_shift = timedelta(days=round(scenario.period_length * 365))
             asof_date = base_date + date_shift
 
-            results.append({
-                "date": asof_date.isoformat(),
-                "market_value": total_mv,
-                "period_number": scenario.period_number,
-                "simulation_number": scenario.simulation_number,
-            })
+            results.append(
+                {
+                    "date": asof_date.isoformat(),
+                    "market_value": total_mv,
+                    "period_number": scenario.period_number,
+                    "simulation_number": scenario.simulation_number,
+                }
+            )
 
         return Response(results, status=200)
